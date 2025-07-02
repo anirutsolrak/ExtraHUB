@@ -58,7 +58,7 @@ function App() {
         setCurrentTask(task.name);
         setLog(`Iniciando tarefa '${task.name}'...\nPor favor, aguarde.\n\n`);
         setIsModalOpen(true);
-        
+
         const taskArgs = { basePath, startDate, endDate };
 
         if (task.needsLogin) {
@@ -67,9 +67,9 @@ function App() {
                 if (task.name.includes('Consumidor.gov')) await window.electronAPI.startGovLogin();
                 else if (task.name.includes('HugMe')) await window.electronAPI.startHugmeLogin();
                 else if (task.name.includes('Procon-SP')) await window.electronAPI.startProconSpLogin();
-                
+
                 setShowLoginConfirmModal(false);
-                log("Login confirmado! Executando automação...");
+                setLog(prev => prev + "Login confirmado! Executando automação...\n");
                 window.electronAPI.runTask(task.ipcName, taskArgs);
             } catch (error) {
                 setShowLoginConfirmModal(false);

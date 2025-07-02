@@ -839,5 +839,14 @@ const createLoginFlow = (loginURL, partition, title) => {
                 reject(new Error("Janela de login não está mais disponível."));
             }
         });
+
+        ipcMain.once('login-canceled', () => {
+            if (activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+                activeLoginWindow.close();
+            }
+            activeLoginWindow = null;
+            // Aqui está a correção: chamamos reject, que será capturado pelo try/catch no frontend.
+            reject(new Error(`Login para '${title}' cancelado pelo usuário.`));
+        });
     });
 };
