@@ -1,0 +1,45 @@
+{
+  "name": "extrahub",
+  "version": "1.1.0",
+  "description": "Hub de Gestão de Automações e Relatórios",
+  "main": "main_electron.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder"
+  },
+  "keywords": [],
+  "author": "Carlos Turina",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "playwright": "^1.45.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^31.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.carlosturina.extrahub",
+    "productName": "ExtraHUB",
+    "directories": {
+      "output": "dist"
+    },
+"files": [
+  "main_electron.js",
+  "preload.js",
+  "frontend/**/*",
+  "backend/**/*",
+  "package.json",
+  "!node_modules/fsevents"
+],
+    "win": {
+      "icon": "frontend/assets/icon.ico",
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
