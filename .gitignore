@@ -1,0 +1,24 @@
+# Dependências Node.js
+node_modules/
+
+# Build/output Electron
+dist/
+out/
+
+# Arquivos temporários do sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache do VSCode
+.vscode/
+
+# Arquivos do sistema operacional
+*.swp
+
+# NÃO ignore o .env (será versionado)
+# !.env

@@ -1,0 +1,104 @@
+# ExtraHUB
+
+Hub de Gestão de Automações e Relatórios
+
+---
+
+## ✨ Sobre
+
+O **ExtraHUB** é uma aplicação desktop multiplataforma (Electron + React) para automatizar downloads de relatórios e integrar dados de múltiplas fontes, como Procon-SP, Consumidor.gov e HugMe. O objetivo é facilitar a rotina de extração, unificação e análise de dados para equipes de atendimento, compliance e gestão.
+
+---
+
+## 🚀 Como Usar
+
+### 1. Pré-requisitos
+
+- [Node.js](https://nodejs.org/) (recomendado v18+)
+- [npm](https://www.npmjs.com/) (geralmente já vem com o Node)
+- [Git](https://git-scm.com/)
+
+### 2. Instalação
+
+Clone o repositório:
+
+```bash
+git clone https://github.com/anirutsolrak/ExtraHUB.git
+cd ExtraHUB
+```
+
+Instale as dependências:
+
+```bash
+npm install
+```
+
+### 3. Configuração
+
+Crie (ou edite) o arquivo `.env` na raiz do projeto com as variáveis necessárias para automações (usuários, senhas, etc).  
+**Exemplo:**
+```
+CPF=00000000000
+SENHA=suasenha
+```
+
+### 4. Executando em modo desenvolvimento
+
+```bash
+npm start
+```
+O aplicativo abrirá em modo desktop.
+
+### 5. Gerando instalador (Windows)
+
+```bash
+npm run pack
+```
+O instalador será gerado na pasta `dist/`.
+
+---
+
+## 🖥️ Funcionalidades
+
+- **Automação de Download**: Procon-SP, Consumidor.gov, HugMe.
+- **Busca por CPF**: Pesquisa rápida em bases unificadas.
+- **Logs em tempo real**: Acompanhe o progresso das automações.
+- **Interface amigável**: Navegação por abas, seleção de pastas, feedback visual.
+
+---
+
+## 📁 Estrutura de Pastas
+
+```
+ExtraHUB/
+├── backend/           # Scripts auxiliares e bases de dados
+├── frontend/          # Interface React
+├── main_electron.js   # Processo principal Electron
+├── preload.js         # Bridge de comunicação Electron <-> Frontend
+├── .env               # Variáveis de ambiente (suba para o repositório se desejar)
+├── .gitignore
+├── package.json
+└── dist/              # (Ignorado) Builds e instaladores
+```
+
+---
+
+## 🛠️ Desenvolvimento
+
+- **Adicionar novas automações:**  
+  Implemente um novo handler no `main_electron.js` e exponha via IPC.
+- **Frontend:**  
+  Os componentes React ficam em `frontend/`.
+
+---
+
+## 🤝 Contribuição
+
+Pull requests são bem-vindos!  
+Abra uma issue para discutir melhorias ou reportar bugs.
+
+---
+
+## 📄 Licença
+
+ISC © Carlos
