@@ -5,7 +5,8 @@
   "main": "main_electron.js",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder"
+    "pack": "electron-builder",
+    "postinstall": "playwright install chromium"
   },
   "keywords": [],
   "author": "Carlos Turina",
@@ -25,14 +26,22 @@
     "directories": {
       "output": "dist"
     },
-"files": [
-  "main_electron.js",
-  "preload.js",
-  "frontend/**/*",
-  "backend/**/*",
-  "package.json",
-  "!node_modules/fsevents"
-],
+    "files": [
+      "main_electron.js",
+      "preload.js",
+      "frontend/**/*",
+      "backend/**/*",
+      "package.json",
+      "playwright.config.js",
+      "node_modules/playwright/.local-browsers/**",
+      "!node_modules/fsevents"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/.env",
+        "to": "app.asar.unpacked/backend/.env"
+      }
+    ],
     "win": {
       "icon": "frontend/assets/icon.ico",
       "target": "nsis"

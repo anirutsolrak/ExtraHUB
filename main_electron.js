@@ -2,6 +2,27 @@ const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright');
+
+function getChromiumPath() {
+    // Caminho padrão do Playwright (dev)
+    let chromiumPath = chromium.executablePath();
+
+    // Se empacotado, tenta o caminho do build
+    if (app.isPackaged) {
+        // Ajuste o número da versão conforme a pasta baixada
+        const browserDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'playwright', '.local-browsers');
+        // Descobre a pasta chromium-xxxx dinamicamente
+        const chromiumFolder = fs.readdirSync(browserDir).find(f => f.startsWith('chromium-'));
+        if (chromiumFolder) {
+            const manualPath = path.join(browserDir, chromiumFolder, 'chrome-win', 'chrome.exe');
+            if (fs.existsSync(manualPath)) {
+                chromiumPath = manualPath;
+            }
+        }
+    }
+    return chromiumPath;
+}
+
 const dotenv = require('dotenv');
 const XLSX = require('xlsx');
 
@@ -64,8 +85,9 @@ const runAutomation = async (taskName, logic, useLoginWindow = false) => {
             // Aqui, vamos lançar um erro claro para evitar uso incorreto:
             throw new Error("Automação com login assistido via Electron não está implementada corretamente. O controle Playwright não pode ser feito diretamente sobre BrowserWindow.");
         } else {
-            const executablePath = isDev ? undefined : path.join(process.resourcesPath, 'app.asar.unpacked', 'playwright_browsers', 'chromium-1124', 'chrome-win', 'chrome.exe');
-            browser = await chromium.launch({ headless: false, executablePath });
+            const chromiumPath = getChromiumPath();
+            console.log('Usando Chromium em:', chromiumPath);
+            browser = await chromium.launch({ headless: false, executablePath: chromiumPath });
             page = await browser.newPage();
         }
         await logic(page);
@@ -86,143 +108,192 @@ const runAutomation = async (taskName, logic, useLoginWindow = false) => {
 // --- Funções de Tarefas (Mapeadas do Índice) ---
 
 // --- 1. [PROCON-SP]: Download ---
-ipcMain.handle('automation:run-proconsp-download', (event, args) => runAutomation("Procon-SP", async (page) => {
-    const { basePath, startDate: startDateStr, endDate: endDateStr } = args;
-    const downloadsPath = path.join(basePath, "Relatorios_PROCON_SP");
-    fs.mkdirSync(downloadsPath, { recursive: true });
-
-    const finalEndDate = endDateStr ? parseDate(endDateStr) : new Date(new Date() - 86400000);
-    const defaultStartDate = new Date(2023, 4, 1);
-    let currentDate = startDateStr ? parseDate(startDateStr) : defaultStartDate;
-    
-    log(`Período de busca: ${formatDate(currentDate)} a ${formatDate(finalEndDate)}`);
-    let lastProcessedDate = new Date(currentDate);
-
-    page.on('download', async (download) => {
-        const dateSuffix = `${lastProcessedDate.getFullYear()}-${String(lastProcessedDate.getMonth() + 1).padStart(2, '0')}-${String(lastProcessedDate.getDate()).padStart(2, '0')}`;
-        const fileName = `relatorio_SP_${dateSuffix}_auto.csv`;
-        const savePath = path.join(downloadsPath, fileName);
-        await download.saveAs(savePath);
-        log(`Download salvo: ${fileName}`);
-    });
-
-    while (currentDate <= finalEndDate) {
-        let periodEndDate = new Date(currentDate);
-        periodEndDate.setDate(periodEndDate.getDate() + 29);
-        if (periodEndDate > finalEndDate) periodEndDate = finalEndDate;
-
-        const sDate = formatDate(currentDate);
-        const eDate = formatDate(periodEndDate);
-        lastProcessedDate = new Date(currentDate);
-        
-        log(`--- Processando lote: ${sDate} a ${eDate} ---`);
-        try {
-            await page.locator('button:has-text("Exportar para csv")').click();
-            await page.locator("app-date-field[labeltext='De'] input[mask]").waitFor();
-            await page.locator("app-date-field[labeltext='De'] input[mask]").fill(sDate);
-            await page.locator("app-date-field[labeltext='Até'] input[mask]").fill(eDate);
-            await page.locator("//mat-dialog-actions//button[contains(., 'Gerar csv')]").click();
-            await page.waitForTimeout(3000);
-        } catch (e) {
-            log(`AVISO: Falha ao gerar lote de ${sDate}. Verificando se há pop-up de 'Nenhum item'...`);
-            if (await page.locator("//button/span[contains(text(), 'Ok')]").isVisible()) {
-                await page.locator("//button/span[contains(text(), 'Ok')]").click();
-                log("Pop-up 'Nenhum item' fechado.");
-            }
+ipcMain.handle('automation:run-proconsp-download', async (event, args) => {
+    log(`>>> Iniciando automação Procon-SP...`);
+    try {
+        if (!activeLoginWindow || activeLoginWindow.isDestroyed()) {
+            throw new Error("A janela de login do Procon-SP não está mais disponível.");
         }
-        
-        currentDate = new Date(periodEndDate);
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-}, true));
+        const { basePath, startDate: startDateStr, endDate: endDateStr } = args;
+        const downloadsPath = path.join(basePath, "Relatorios_PROCON_SP");
+        fs.mkdirSync(downloadsPath, { recursive: true });
 
+        const finalEndDate = endDateStr ? parseDate(endDateStr) : new Date(new Date() - 86400000);
+        const defaultStartDate = new Date(2023, 4, 1);
+        let currentDate = startDateStr ? parseDate(startDateStr) : defaultStartDate;
+        let lastProcessedDate = new Date(currentDate);
+
+        activeLoginWindow.webContents.session.on('will-download', (event, item) => {
+            const dateSuffix = `${lastProcessedDate.getFullYear()}-${String(lastProcessedDate.getMonth() + 1).padStart(2, '0')}-${String(lastProcessedDate.getDate()).padStart(2, '0')}`;
+            const fileName = `relatorio_SP_${dateSuffix}_auto.csv`;
+            const savePath = path.join(downloadsPath, fileName);
+            item.setSavePath(savePath);
+            item.once('done', (e, state) => {
+                if (state === 'completed') log(`Download salvo: ${fileName}`);
+                else log(`Download ${fileName} falhou: ${state}`);
+            });
+        });
+
+        while (currentDate <= finalEndDate) {
+            let periodEndDate = new Date(currentDate);
+            periodEndDate.setDate(periodEndDate.getDate() + 29);
+            if (periodEndDate > finalEndDate) periodEndDate = finalEndDate;
+            const sDate = formatDate(currentDate);
+            const eDate = formatDate(periodEndDate);
+            lastProcessedDate = new Date(currentDate);
+
+            log(`--- Processando lote: ${sDate} a ${eDate} ---`);
+            try {
+                await activeLoginWindow.webContents.executeJavaScript(`
+                    document.querySelector('button:has-text("Exportar para csv")').click();
+                    new Promise(resolve => setTimeout(resolve, 1500)).then(() => {
+                        document.querySelector("app-date-field[labeltext='De'] input[mask]").value = "${sDate}";
+                        document.querySelector("app-date-field[labeltext='Até'] input[mask]").value = "${eDate}";
+                        document.querySelector("mat-dialog-actions button span.mat-button-wrapper:has-text('Gerar csv')").click();
+                    });
+                `);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            } catch (e) {
+                log(`AVISO: Falha ao gerar lote de ${sDate}.`);
+                const okBtnVisible = await activeLoginWindow.webContents.executeJavaScript(`document.querySelector("button span:has-text('Ok')") !== null`);
+                if (okBtnVisible) {
+                    await activeLoginWindow.webContents.executeJavaScript(`document.querySelector("button span:has-text('Ok')").click()`);
+                    log("Pop-up 'Nenhum item' fechado.");
+                }
+            }
+
+            currentDate = new Date(periodEndDate.setDate(periodEndDate.getDate() + 1));
+        }
+        finishTask("Automação Procon-SP concluída!");
+    } catch (error) {
+        errorTask(`ERRO na automação Procon-SP: ${error}`);
+    } finally {
+        if (activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+            activeLoginWindow.close();
+            activeLoginWindow = null;
+        }
+    }
+});
 
 // --- 2. [HugMe]: Download ---
-ipcMain.handle('automation:run-hugme-download', (event, args) => runAutomation("HugMe", async (page) => {
-    const { basePath, startDate, endDate } = args;
-    const EXPORT_PAGE_URL = "https://app.hugme.com.br/app.html#/dados/tickets/exportar/";
-    const EMPRESAS = ["Ciasprev", "Você Seguradora", "Hoje Previdência", "AKRK Promotora", "Click Bank Digital", "Capital Consig"];
-    
-    await page.goto(EXPORT_PAGE_URL);
-    log("Aguardando formulário de relatório...");
-    await page.waitForFunction(() => angular.element(document.querySelector('div.create-report-wrapper')).scope()?.headerDomains?.empresa.length > 1, null, { timeout: 30000 });
-    log("Formulário carregado.");
+ipcMain.handle('automation:run-hugme-download', async (event, args) => {
+    log(`>>> Iniciando automação HugMe...`);
+    try {
+        if (!activeLoginWindow || activeLoginWindow.isDestroyed()) {
+            throw new Error("A janela de login do HugMe não está mais disponível.");
+        }
+        const { basePath, startDate, endDate } = args;
+        const EXPORT_PAGE_URL = "https://app.hugme.com.br/app.html#/dados/tickets/exportar/";
+        const EMPRESAS = ["Ciasprev", "Você Seguradora", "Hoje Previdência", "AKRK Promotora", "Click Bank Digital", "Capital Consig"];
 
-    const downloadsPath = path.join(basePath, "Relatorios_HUGME");
-    fs.mkdirSync(downloadsPath, { recursive: true });
-    page.on('download', async download => {
-        const filePath = path.join(downloadsPath, download.suggestedFilename());
-        await download.saveAs(filePath);
-        log(`Download salvo: ${download.suggestedFilename()}`);
-    });
+        await activeLoginWindow.webContents.loadURL(EXPORT_PAGE_URL);
+        log("Aguardando formulário de relatório...");
+        await activeLoginWindow.webContents.executeJavaScript(`new Promise(r => { const i = setInterval(() => { if (angular.element(document.querySelector('div.create-report-wrapper')).scope()?.headerDomains?.empresa.length > 1) { clearInterval(i); r(); } }, 500); setTimeout(() => { clearInterval(i); r(); }, 30000); })`);
+        log("Formulário carregado.");
 
-    const reportTitles = [];
-    for (const empresa of EMPRESAS) {
-        log(`\n--- Gerando relatório para: ${empresa} ---`);
-        const reportTitle = `Relatorio_${empresa.replace(/\s/g, '_')}_${new Date().toISOString().replace(/[:.]/g, '-')}`;
-        reportTitles.push(reportTitle);
-        let sDate = startDate || formatDate(new Date(new Date().setFullYear(new Date().getFullYear() - 5)));
-        let eDate = endDate || formatDate(new Date());
-        
-        await page.evaluate(({ empresa, reportTitle, sDate, eDate }) => {
-            const scope = angular.element(document.querySelector('div.create-report-wrapper')).scope();
-            const opt = scope.headerDomains.empresa.find(e => e.nomeRaResponde === empresa);
-            if (!opt) throw new Error(`Empresa "${empresa}" não encontrada.`);
-            scope.header.empresa = opt.idEmpresa;
-            scope.header.titulo = reportTitle;
-            scope.periodoPreDef = 'false';
-            scope.$apply();
-            scope.header.periodo.ini = sDate;
-            scope.header.periodo.fim = eDate;
-            if (!document.getElementById('selAll').checked) document.getElementById('selAll').click();
-            scope.$apply();
-            document.querySelector('button[ng-click="submitFilter();"]').click();
-        }, { empresa, reportTitle, sDate, eDate });
-        
-        log(`-> Relatório '${reportTitle}' solicitado.`);
-        await page.waitForTimeout(4000);
+        const downloadsPath = path.join(basePath, "Relatorios_HUGME");
+        fs.mkdirSync(downloadsPath, { recursive: true });
+        activeLoginWindow.webContents.session.on('will-download', (event, item) => {
+            const filePath = path.join(downloadsPath, item.getFilename());
+            item.setSavePath(filePath);
+            item.once('done', (e, state) => {
+                if (state === 'completed') log(`Download salvo: ${item.getFilename()}`);
+                else log(`Download de ${item.getFilename()} falhou: ${state}`);
+            });
+        });
+
+        for (const empresa of EMPRESAS) {
+            log(`\n--- Gerando relatório para: ${empresa} ---`);
+            const reportTitle = `Relatorio_${empresa.replace(/\s/g, '_')}_${new Date().toISOString().replace(/[:.]/g, '-')}`;
+            let sDate = startDate || formatDate(new Date(new Date().setFullYear(new Date().getFullYear() - 5)));
+            let eDate = endDate || formatDate(new Date());
+
+            await activeLoginWindow.webContents.executeJavaScript(`
+                (() => {
+                    const scope = angular.element(document.querySelector('div.create-report-wrapper')).scope();
+                    const opt = scope.headerDomains.empresa.find(e => e.nomeRaResponde === '${empresa}');
+                    if (!opt) throw new Error('Empresa "${empresa}" não encontrada.');
+                    scope.header.empresa = opt.idEmpresa;
+                    scope.header.titulo = '${reportTitle}';
+                    scope.periodoPreDef = 'false';
+                    scope.$apply();
+                    scope.header.periodo.ini = '${sDate}';
+                    scope.header.periodo.fim = '${eDate}';
+                    if (!document.getElementById('selAll').checked) document.getElementById('selAll').click();
+                    scope.$apply();
+                    document.querySelector('button[ng-click="submitFilter();"]').click();
+                })();
+            `);
+            log(`-> Relatório '${reportTitle}' solicitado.`);
+            await new Promise(r => setTimeout(r, 4000));
+        }
+
+        log("\n--- Relatórios solicitados. A automação será encerrada em breve. ---");
+        await new Promise(r => setTimeout(r, 10000));
+        finishTask("Automação HugMe concluída!");
+    } catch (error) {
+        errorTask(`ERRO na automação HugMe: ${error}`);
+    } finally {
+        if (activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+            activeLoginWindow.close();
+            activeLoginWindow = null;
+        }
     }
-    
-    log("\n--- Relatórios solicitados. A automação será encerrada. Verifique os downloads manualmente. ---");
-    await page.waitForTimeout(10000);
-
-}, true));
-
+});
 
 // --- 3. [Consumidor.gov]: Download ---
-ipcMain.handle('automation:run-gov-download', (event, args) => runAutomation("Consumidor.gov", async (page) => {
-    const { basePath, startDate: startDateStr, endDate: endDateStr } = args;
-    await page.goto("https://consumidor.gov.br/pages/exportacao-dados/novo");
-    log("Aguardando formulário...");
-    await page.waitForSelector('form#exportacaoDadosForm', { timeout: 30000 });
-    log("Formulário encontrado! Iniciando downloads...");
-    const downloadsPath = path.join(basePath, "Relatorios_Consumidor_Gov");
-    fs.mkdirSync(downloadsPath, { recursive: true });
-    
-    page.on('download', async download => {
-        const filePath = path.join(downloadsPath, `relatorio_Gov_${new Date().getTime()}.xls`);
-        await download.saveAs(filePath);
-        log(`Download salvo: ${path.basename(filePath)}`);
-    });
+ipcMain.handle('automation:run-gov-download', async (event, args) => {
+    log(`>>> Iniciando automação Consumidor.gov...`);
+    try {
+        if (!activeLoginWindow || activeLoginWindow.isDestroyed()) {
+            throw new Error("A janela de login do Consumidor.gov não está mais disponível.");
+        }
+        const { basePath, startDate: startDateStr, endDate: endDateStr } = args;
+        await activeLoginWindow.webContents.loadURL("https://consumidor.gov.br/pages/exportacao-dados/novo");
+        log("Aguardando formulário...");
+        await activeLoginWindow.webContents.executeJavaScript(`new Promise(r => { const i = setInterval(() => { if(document.querySelector('form#exportacaoDadosForm')) { clearInterval(i); r(); } }, 500); })`);
+        log("Formulário encontrado! Iniciando downloads...");
+        const downloadsPath = path.join(basePath, "Relatorios_Consumidor_Gov");
+        fs.mkdirSync(downloadsPath, { recursive: true });
 
-    const finalEndDate = endDateStr ? parseDate(endDateStr) : new Date(new Date() - 86400000);
-    let currentDate = startDateStr ? parseDate(startDateStr) : new Date(new Date().setFullYear(finalEndDate.getFullYear() - 5));
-    
-    while (currentDate <= finalEndDate) {
-        let periodEndDate = new Date(currentDate);
-        periodEndDate.setDate(periodEndDate.getDate() + 59);
-        if (periodEndDate > finalEndDate) periodEndDate = finalEndDate;
-        const sDate = formatDate(currentDate);
-        const eDate = formatDate(periodEndDate);
-        log(`Processando lote: ${sDate} a ${eDate}`);
-        await page.locator('#dataIniPeriodo').fill(sDate);
-        await page.locator('#dataFimPeriodo').fill(eDate);
-        await page.locator('label[for="colunasExportadas1"]').click();
-        await page.locator('#btnExportar').click();
-        await page.waitForTimeout(5000);
-        currentDate = new Date(periodEndDate.setDate(periodEndDate.getDate() + 1));
+        activeLoginWindow.webContents.session.on('will-download', (event, item) => {
+            const filePath = path.join(downloadsPath, `relatorio_Gov_${new Date().getTime()}.xls`);
+            item.setSavePath(filePath);
+            item.once('done', (e, state) => {
+                if (state === 'completed') log(`Download salvo: ${path.basename(filePath)}`);
+                else log(`Download de ${path.basename(filePath)} falhou: ${state}`);
+            });
+        });
+
+        const finalEndDate = endDateStr ? parseDate(endDateStr) : new Date(new Date() - 86400000);
+        let currentDate = startDateStr ? parseDate(startDateStr) : new Date(new Date().setFullYear(finalEndDate.getFullYear() - 5));
+
+        while (currentDate <= finalEndDate) {
+            let periodEndDate = new Date(currentDate);
+            periodEndDate.setDate(periodEndDate.getDate() + 59);
+            if (periodEndDate > finalEndDate) periodEndDate = finalEndDate;
+            const sDate = formatDate(currentDate);
+            const eDate = formatDate(periodEndDate);
+            log(`Processando lote: ${sDate} a ${eDate}`);
+            await activeLoginWindow.webContents.executeJavaScript(`
+                document.getElementById('dataIniPeriodo').value = '${sDate}';
+                document.getElementById('dataFimPeriodo').value = '${eDate}';
+                document.querySelector('label[for="colunasExportadas1"]').click();
+                document.getElementById('btnExportar').click();
+            `);
+            await new Promise(r => setTimeout(r, 5000));
+            currentDate = new Date(periodEndDate.setDate(periodEndDate.getDate() + 1));
+        }
+        finishTask("Automação Consumidor.gov concluída!");
+    } catch (error) {
+        errorTask(`ERRO na automação Consumidor.gov: ${error}`);
+    } finally {
+        if (activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+            activeLoginWindow.close();
+            activeLoginWindow = null;
+        }
     }
-}, true));
+});
 
 // --- 4. [Proconsumidor]: Download ---
 ipcMain.handle('automation:run-proconsumidor-download', (event, args) => runAutomation("Proconsumidor", async (page) => {
@@ -717,3 +788,56 @@ app.on('activate', () => {
         createWindow();
     }
 });
+
+// --- Lógica de Login Assistido ---
+const createLoginFlow = (loginURL, partition, title) => {
+    return new Promise((resolve, reject) => {
+        if (activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+            activeLoginWindow.focus();
+            return reject(new Error("Uma janela de login já está ativa."));
+        }
+
+        const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
+        const windowWidth = 800;
+        const mainWidth = mainWindow.getBounds().width;
+
+        let mainX = 0;
+        let loginX = mainWidth;
+
+        if (loginX + windowWidth > screenWidth) {
+            loginX = screenWidth - windowWidth;
+            mainX = loginX - mainWidth;
+        }
+
+        mainWindow.setPosition(mainX, mainWindow.getPosition()[1]);
+
+        activeLoginWindow = new BrowserWindow({
+            parent: mainWindow,
+            modal: false,
+            width: windowWidth,
+            height: 700,
+            title: title,
+            x: loginX,
+            y: mainWindow.getPosition()[1],
+            webPreferences: { partition: partition, devTools: true }
+        });
+
+        activeLoginWindow.loadURL(loginURL);
+
+        const onClosed = () => {
+            activeLoginWindow = null;
+            reject(new Error(`Janela de login (${title}) fechada antes da confirmação.`));
+        };
+        activeLoginWindow.once('closed', onClosed);
+
+        ipcMain.once('login-confirmed', () => {
+            if (activeLoginWindow && !activeLoginWindow.isDestroyed()) {
+                activeLoginWindow.removeListener('closed', onClosed);
+                log(`Login para '${title}' confirmado pelo usuário.`);
+                resolve(true);
+            } else {
+                reject(new Error("Janela de login não está mais disponível."));
+            }
+        });
+    });
+};
