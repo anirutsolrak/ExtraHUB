@@ -1,4 +1,4 @@
-function Sidebar({ activeTab, setActiveTab, menuItems }) { 
+function Sidebar({ activeTab, setActiveTab, menuItems, currentUser, onLogout }) { 
   return (
     <div className="w-64 bg-white shadow-lg h-screen flex flex-col flex-shrink-0 sticky top-0">
       <div className="p-6 border-b flex items-center">
@@ -26,16 +26,21 @@ function Sidebar({ activeTab, setActiveTab, menuItems }) {
       </nav>
       
       <div className="p-4 border-t">
-        <div className="flex items-center gap-3">
-          <img
-            src="https://img.freepik.com/icones-gratis/robo_318-698229.jpg"
-            alt="Avatar"
-            className="w-10 h-10 rounded-full bg-gray-200"
-          />
-          <div>
-            <div className="font-semibold text-sm text-gray-800">Usuário Automação</div>
-            <div className="text-xs text-gray-500">Online</div>
-          </div>
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <img
+                    src="https://img.freepik.com/icones-gratis/robo_318-698229.jpg"
+                    alt="Avatar"
+                    className="w-10 h-10 rounded-full bg-gray-200"
+                />
+                <div>
+                    <div className="font-semibold text-sm text-gray-800">{currentUser.name}</div>
+                    <div className="text-xs text-gray-500">Online</div>
+                </div>
+            </div>
+            <button onClick={onLogout} title="Sair" className="p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 rounded-full transition-colors">
+                <div className="icon-log-out text-lg"></div>
+            </button>
         </div>
       </div>
 
