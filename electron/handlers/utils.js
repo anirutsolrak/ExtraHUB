@@ -2,10 +2,10 @@ const { app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-async function runTask(taskName, logic, logging) {
+async function runTask(taskName, logic, logging, args) {
     logging.log(`>>> Iniciando tarefa: ${taskName}...`);
     try {
-        const result = await logic();
+        const result = await logic(args, logging);
         logging.finishTask(`Tarefa '${taskName}' concluída com sucesso!`);
         return result;
     } catch (error) {

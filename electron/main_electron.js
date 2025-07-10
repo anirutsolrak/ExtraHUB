@@ -78,7 +78,7 @@ function createWindow() {
 
     registerAutomationHandlers(ipcMain, loggingUtils);
     registerDataHandlers(ipcMain, loggingUtils, { getGoogleAuthClient: () => googleAuthClient, google });
-    registerAuthHandlers(ipcMain, loggingUtils, { BrowserWindow, session, getGoogleAuthClient: () => googleAuthClient, google });
+    registerAuthHandlers(ipcMain, loggingUtils, { BrowserWindow, session, getGoogleAuthClient: () => googleAuthClient, google, mainWindow });
 }
 
 app.whenReady().then(createWindow);

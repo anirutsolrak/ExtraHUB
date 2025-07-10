@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     startHugmeLogin: () => ipcRenderer.invoke('auth:start-hugme-login'),
     confirmLogin: () => ipcRenderer.send('login-confirmed'),
     cancelLogin: () => ipcRenderer.send('login-canceled'),
+    onAssistedLoginStarted: (callback) => ipcRenderer.on('assisted-login-started', callback),
+    onAssistedLoginFinished: (callback) => ipcRenderer.on('assisted-login-finished', callback),
 
     // Handlers de Tarefas - O frontend só precisa de uma função genérica
     runTask: (taskName, args) => ipcRenderer.invoke(taskName, args)

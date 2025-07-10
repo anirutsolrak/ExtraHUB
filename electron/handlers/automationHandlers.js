@@ -34,8 +34,18 @@ const createProconSimpleDownloader = (taskName, url, folderName, loginFn, output
         logging.log("Login realizado. Definindo período...");
         
         await page.waitForSelector("#dataInicial");
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        let finalEndDate = endArg ? parseDate(endArg) : new Date(today.getTime() - 86400000);
+        if (finalEndDate >= today) {
+            logging.log(`Data final (${formatDate(finalEndDate)}) é inválida. Ajustando para ontem.`);
+            finalEndDate = new Date(today.getTime() - 86400000);
+        }
+
         const startStr = startArg || "01/01/2020";
-        const endStr = endArg || formatDate(new Date(new Date() - 86400000));
+        const endStr = formatDate(finalEndDate);
         
         await page.locator("#dataInicial").fill(startStr);
         await page.locator("#dataFinal").fill(endStr);
@@ -92,18 +102,34 @@ function registerAutomationHandlers(ipcMain, logging) {
             logging.log("Aguardando página recarregar com novo contexto...");
             await page.waitForLoadState('networkidle');
 
-            await page.locator('a[href="#relatorios"]').click();
+            const relatoriosMenuLink = page.locator('a[href="#relatorios"]');
+            if (await relatoriosMenuLink.getAttribute('aria-expanded') === 'false') {
+                logging.log("Menu de Relatórios está colapsado. Clicando para expandir.");
+                await relatoriosMenuLink.click();
+            } else {
+                logging.log("Menu de Relatórios já está expandido.");
+            }
+            
             await page.locator('a[href="#/relatorio/relatorio-gerencial"]').click();
             await page.waitForSelector('#dataInicio');
 
-            const yesterday = endArg ? parseDate(endArg) : new Date(new Date() - 86400000);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            let finalEndDate = endArg ? parseDate(endArg) : new Date(today.getTime() - 86400000);
+            if (finalEndDate >= today) {
+                logging.log(`Data final (${formatDate(finalEndDate)}) é inválida. Ajustando para ontem.`);
+                finalEndDate = new Date(today.getTime() - 86400000);
+            }
             let currentDate = startArg ? parseDate(startArg) : new Date(2020, 0, 1);
-            while (currentDate <= yesterday) {
-                let endDate = new Date(currentDate);
-                endDate.setDate(endDate.getDate() + 59);
-                if (endDate > yesterday) endDate = yesterday;
+            
+            while (currentDate <= finalEndDate) {
+                let periodEndDate = new Date(currentDate);
+                periodEndDate.setDate(periodEndDate.getDate() + 59);
+                if (periodEndDate > finalEndDate) {
+                    periodEndDate = finalEndDate;
+                }
                 const startStr = formatDate(currentDate);
-                const endStr = formatDate(endDate);
+                const endStr = formatDate(periodEndDate);
                 logging.log(`Gerando relatório para: ${startStr} a ${endStr}`);
                 
                 await page.locator('#tipoPeriodoPesquisa1').check();
@@ -121,8 +147,7 @@ function registerAutomationHandlers(ipcMain, logging) {
                 await download.saveAs(path.join(empresaFolderPath, fileName));
                 logging.log(`Relatório salvo: ${fileName}`);
                 
-                if (endDate.getTime() === yesterday.getTime()) break;
-                currentDate = new Date(endDate.setDate(endDate.getDate() + 1));
+                currentDate = new Date(periodEndDate.getTime() + 86400000);
             }
         }
     }, { logging }));
@@ -173,11 +198,21 @@ function registerAutomationHandlers(ipcMain, logging) {
         await page.waitForSelector('input[name="dataDe"]');
         let fileSuffix = "historico_completo";
         if (startArg && endArg) {
-            logging.log(`Usando período: ${startArg} a ${endArg}`);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            let finalEndDate = parseDate(endArg);
+            if (finalEndDate >= today) {
+                logging.log(`Data final (${formatDate(finalEndDate)}) é inválida. Ajustando para ontem.`);
+                finalEndDate = new Date(today.getTime() - 86400000);
+            }
+            const finalEndStr = formatDate(finalEndDate);
+            
+            logging.log(`Usando período: ${startArg} a ${finalEndStr}`);
             await page.locator('input[name="dataDe"]').fill(startArg);
-            await page.locator('input[name="dataAte"]').fill(endArg);
+            await page.locator('input[name="dataAte"]').fill(finalEndStr);
             const startForFile = startArg.split('/').reverse().join('-');
-            const endForFile = endArg.split('/').reverse().join('-');
+            const endForFile = finalEndStr.split('/').reverse().join('-');
             fileSuffix = `${startForFile}_a_${endForFile}`;
         }
         
