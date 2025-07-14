@@ -16,19 +16,16 @@ function App() {
     const [startDate, setStartDate] = React.useState('');
     const [endDate, setEndDate] = React.useState('');
     
-    const handleLogin = async (username, password) => {
+    const handleLogin = async (username, password, userType) => {
         setLoginError('');
         setIsLoggingIn(true);
         try {
-            const result = await window.electronAPI.runTask('auth:app-login', { username, password });
+            const result = await window.electronAPI.runTask('auth:app-login', { username, password, userType });
             if (result.success) {
-                const user = {
-                    name: result.user.Nome_Gestor,
-                    trelloId: result.user.ID_Trello,
-                    trelloUsername: result.user.Username_Trello,
-                    allowedBoardIds: result.user.allowedBoardIds || []
-                };
-                setCurrentUser(user);
+                setCurrentUser(result.user);
+                setActiveTab('home');
+            } else {
+                setLoginError(result.error || 'Falha no login: Resposta inesperada do servidor.');
             }
         } catch (error) {
             setLoginError(`Falha no login: ${error.message}`);
@@ -102,7 +99,6 @@ function App() {
         window.electronAPI.onTaskFinished(message => setLog(prev => prev + `\n--- ${message || 'Tarefa concluída!'} ---\n`));
         window.electronAPI.onTaskError(error => setLog(prev => prev + `\n!!! ERRO: ${error} !!!\n`));
 
-        // Listeners for assisted login prompt
         window.electronAPI.onAssistedLoginStarted(() => setIsAssistedLogin(true));
         window.electronAPI.onAssistedLoginFinished(() => setIsAssistedLogin(false));
     }, []);
@@ -134,6 +130,13 @@ function App() {
     const categoryOrder = ['Download', 'API'];
 
     const renderContent = () => {
+        const isManager = currentUser && currentUser.role === 'gestor';
+        const managerOnlyTabs = ['atribuicao', 'access-management', 'automations', 'pipeline'];
+        
+        if (!isManager && managerOnlyTabs.includes(activeTab)) {
+            return <div className="text-center p-8"><p>Acesso negado. Esta área é restrita para gestores.</p></div>;
+        }
+
         switch (activeTab) {
             case 'home':
                 return <HomeScreen currentUser={currentUser} />;
@@ -190,13 +193,23 @@ function App() {
     if (!currentUser) {
         return <LoginScreen onLogin={handleLogin} error={loginError} isLoading={isLoggingIn} />;
     }
+    
+    const visibleMenuItems = menuItems.filter(item => {
+        if (!currentUser || !currentUser.role) return false;
+        if (currentUser.role === 'gestor') return true; 
+        if (currentUser.role === 'analista') {
+            const analystAllowed = ['home', 'consult', 'audiencias', 'settings'];
+            return analystAllowed.includes(item.id);
+        }
+        return false;
+    });
 
     return (
         <div className="min-h-screen bg-gray-100 flex">
             <Sidebar 
                 activeTab={activeTab} 
                 setActiveTab={setActiveTab} 
-                menuItems={menuItems}
+                menuItems={visibleMenuItems}
                 currentUser={currentUser}
                 onLogout={handleLogout}
             />

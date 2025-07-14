@@ -33,6 +33,16 @@ function HomeScreen({ currentUser }) {
             </div>
         );
     }
+    
+    if (currentUser.role === 'analista') {
+        return (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8 bg-gray-50 rounded-lg">
+                <div className="icon-user-check text-6xl text-green-500 mb-4"></div>
+                <h2 className="text-3xl font-bold text-gray-800">Bem-vindo(a), {currentUser.name}!</h2>
+                <p className="text-gray-600 mt-2 max-w-md">Seu acesso de analista está confirmado. Utilize o menu ao lado para navegar para as seções disponíveis.</p>
+            </div>
+        );
+    }
 
     const updateTrelloUrl = (boardId, managerUsername) => {
         if (!boardId) return;

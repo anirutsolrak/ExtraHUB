@@ -3,35 +3,52 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const { runTask, parseDate, formatDate } = require('./utils');
 
-const unifiedDateParser = (dateValue) => {
-    if (!dateValue) return '';
-
-    if (typeof dateValue === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateValue)) {
-        return dateValue;
+const preProcessExcelFile = (filePath, { numberColumns = [] }, logging, sheetOptions = {}) => {
+    if (!filePath.toLowerCase().endsWith('.xlsx') && !filePath.toLowerCase().endsWith('.xls')) {
+        return;
     }
 
-    let date = null;
+    if (!fs.existsSync(filePath)) {
+        logging.log(`Arquivo para pré-processamento não encontrado: ${path.basename(filePath)}`);
+        return;
+    }
 
-    if (dateValue instanceof Date) {
-        date = dateValue;
-    } else if (typeof dateValue === 'number' && dateValue > 1) {
-        date = new Date(Math.round((dateValue - 25569) * 86400 * 1000));
-    } else if (typeof dateValue === 'string') {
-        let tempValue = dateValue.replace(',', '.');
+    logging.log(`Pré-processando arquivo: ${path.basename(filePath)}`);
+    try {
+        const workbook = XLSX.readFile(filePath, { cellNF: true });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
 
-        if (!isNaN(Number(tempValue))) {
-            const numericValue = Number(tempValue);
-            date = new Date(Math.round((numericValue - 25569) * 86400 * 1000));
-        } else {
-            date = parseDate(dateValue);
+        if (!sheet || !sheet['!ref']) return;
+
+        const range = XLSX.utils.decode_range(sheet['!ref']);
+        const headerRow = sheetOptions.range ? sheetOptions.range : 0;
+        
+        const headerMap = {};
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cell = sheet[XLSX.utils.encode_cell({ r: headerRow, c: C })];
+            if (cell && cell.v) {
+                headerMap[cell.v] = C;
+            }
         }
-    }
 
-    if (date && !isNaN(date.getTime())) {
-        return formatDate(date);
-    }
+        for (const colName of numberColumns) {
+            const colIndex = headerMap[colName];
+            if (colIndex !== undefined) {
+                for (let R = range.s.r + headerRow + 1; R <= range.e.r; ++R) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: R, c: colIndex });
+                    const cell = sheet[cellAddress];
+                    if (cell && cell.t === 'n') {
+                        cell.z = '0';
+                    }
+                }
+            }
+        }
 
-    return '';
+        XLSX.writeFile(workbook, filePath, { bookType: 'xlsx' });
+    } catch(error) {
+        logging.errorTask(`Falha no pré-processamento de ${path.basename(filePath)}: ${error.message}`);
+    }
 };
 
 function arraysToObjects(arrays) {
@@ -100,26 +117,6 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         if (!auth) throw new Error("Cliente Google não autenticado.");
         if (!spreadsheetId) throw new Error("GOOGLE_SHEET_ID não definido no arquivo .env.");
         return google.sheets({ version: 'v4', auth });
-    };
-
-    const getOrCreateSheet = async (sheets, sheetName) => {
-        const sheetInfo = await sheets.spreadsheets.get({ spreadsheetId });
-        const existingSheet = sheetInfo.data.sheets.find(s => s.properties.title === sheetName);
-        if (existingSheet) {
-            return existingSheet.properties.sheetId;
-        } else {
-            const createResponse = await sheets.spreadsheets.batchUpdate({
-                spreadsheetId,
-                requestBody: {
-                    requests: [{
-                        addSheet: {
-                            properties: { title: sheetName }
-                        }
-                    }]
-                }
-            });
-            return createResponse.data.replies[0].addSheet.properties.sheetId;
-        }
     };
 
     ipcMain.handle('trello:get-boards', (event) => runTask('Buscar Quadros Trello', async (args, currentLogging) => {
@@ -286,6 +283,57 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         }
     };
 
+    const getSimpleConsolidateLogic = (folder, outputName, sheetName, options = {}) => async (args, currentLogging) => {
+        const reportsPath = path.join(args.basePath, `Relatorios_${folder}`);
+        if (!fs.existsSync(reportsPath)) {
+            currentLogging.log(`Pasta ${reportsPath} não encontrada, pulando.`);
+            return;
+        }
+    
+        const allFilesInDir = fs.readdirSync(reportsPath);
+        const files = allFilesInDir.filter(f =>
+            (f.toLowerCase().endsWith('.xls') || f.toLowerCase().endsWith('.csv') || f.toLowerCase().endsWith('.xlsx')) &&
+            !f.toLowerCase().startsWith('relatorio_consolidado') &&
+            !f.toLowerCase().endsWith('.tmp')
+        );
+    
+        if (files.length === 0) {
+            currentLogging.log(`Nenhum arquivo para consolidar encontrado em ${reportsPath}.`);
+            return;
+        }
+    
+        currentLogging.log(`Encontrados ${files.length} arquivos para consolidar em ${folder}.`);
+        let allData = [];
+        for (const file of files) {
+            const filePath = path.join(reportsPath, file);
+            let workbook = XLSX.readFile(filePath, { cellDates: false });
+            let sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(sheet, { ...options, raw: false });
+            
+            jsonData.forEach(row => {
+                for (const key in row) {
+                    if (key.startsWith('__EMPTY')) {
+                        delete row[key];
+                    }
+                }
+            });
+
+            allData.push(...jsonData);
+        }
+
+        if (allData.length === 0) {
+            currentLogging.log(`Nenhum dado encontrado nos arquivos de ${folder}.`);
+            return;
+        }
+        
+        const newWorkbook = XLSX.utils.book_new();
+        const newSheet = XLSX.utils.json_to_sheet(allData);
+        XLSX.utils.book_append_sheet(newWorkbook, newSheet, sheetName);
+        const outputPath = path.join(reportsPath, outputName);
+        XLSX.writeFile(newWorkbook, outputPath, { bookType: 'xlsx', type: 'buffer' });
+        currentLogging.log(`Consolidação de ${folder} concluída! Arquivo salvo em: ${outputPath}`);
+    };
+
     const consolidateProconsumidorLogic = async (args, currentLogging) => {
         const reportsPath = path.join(args.basePath, "Relatorios_PROCONSUMIDOR");
         const outputPath = path.join(reportsPath, "Relatorio_Consolidado.xlsx");
@@ -296,7 +344,7 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
 
         const newWorkbook = XLSX.utils.book_new();
         const allCompanyData = [];
-
+        
         for (const company of companyFolders) {
             const companyPath = path.join(reportsPath, company);
             const files = fs.readdirSync(companyPath).filter(f => f.toLowerCase().endsWith('.xls'));
@@ -305,14 +353,23 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             currentLogging.log(`Processando ${files.length} arquivos para ${company}...`);
             const companyData = [];
             for (const file of files) {
-                const workbook = XLSX.readFile(path.join(companyPath, file));
+                const workbook = XLSX.readFile(path.join(companyPath, file), { cellDates: false });
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                companyData.push(...XLSX.utils.sheet_to_json(sheet));
+                const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false });
+                
+                jsonData.forEach(row => {
+                    for (const key in row) {
+                        if (key.startsWith('__EMPTY')) {
+                            delete row[key];
+                        }
+                    }
+                });
+
+                companyData.push(...jsonData);
             }
             
             const companySheet = XLSX.utils.json_to_sheet(companyData);
             XLSX.utils.book_append_sheet(newWorkbook, companySheet, company.substring(0, 31));
-            
             companyData.forEach(row => row['Fonte_Empresa'] = company);
             allCompanyData.push(...companyData);
         }
@@ -321,146 +378,68 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             const unifiedSheet = XLSX.utils.json_to_sheet(allCompanyData);
             XLSX.utils.book_append_sheet(newWorkbook, unifiedSheet, 'Unificado');
             XLSX.writeFile(newWorkbook, outputPath, { bookType: 'xlsx', type: 'buffer' });
-            currentLogging.log(`Consolidação concluída! Arquivo salvo em: ${outputPath}`);
+            currentLogging.log(`Consolidação do Proconsumidor concluída! Arquivo salvo em: ${outputPath}`);
         } else {
-            currentLogging.log("Nenhum dado encontrado para consolidar.");
+            currentLogging.log("Nenhum dado do Proconsumidor encontrado para consolidar.");
         }
     };
-
-    const getSimpleConsolidateLogic = (folder, outputName, sheetName) => async (args, currentLogging) => {
-        const reportsPath = path.join(args.basePath, `Relatorios_${folder}`);
-        if (!fs.existsSync(reportsPath)) { currentLogging.log(`Pasta ${reportsPath} não encontrada, pulando.`); return; }
-    
-        const allFilesInDir = fs.readdirSync(reportsPath);
-        let files;
-    
-        if (folder === 'HUGME') {
-            files = allFilesInDir.filter(f => f.toLowerCase() !== outputName.toLowerCase() && !f.toLowerCase().endsWith('.tmp'));
-        } else {
-            files = allFilesInDir.filter(f =>
-                f.toLowerCase().endsWith('.xls') ||
-                f.toLowerCase().endsWith('.csv') ||
-                f.toLowerCase().endsWith('.xlsx')
-            );
-        }
-    
-        if (files.length === 0) { currentLogging.log(`Nenhum arquivo para consolidar encontrado em ${reportsPath}.`); return; }
-
-        currentLogging.log(`Encontrados ${files.length} arquivos para consolidar.`);
-        let allData = [];
-        for (const file of files) {
-            const filePath = path.join(reportsPath, file);
-            let workbook = XLSX.readFile(filePath);
-            let sheet = workbook.Sheets[workbook.SheetNames[0]];
-
-            if (folder === "HUGME") {
-                const jsonData = XLSX.utils.sheet_to_json(sheet, { range: 3 });
-                allData.push(...jsonData);
-            } else if (folder === "BCB_RDR") {
-                const rawDataAsArray = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-                if (rawDataAsArray.length > 2) {
-                    const headers = rawDataAsArray[2];
-                    const dataRows = rawDataAsArray.slice(3);
-                    
-                    const jsonData = dataRows.map(rowArray => {
-                        const rowObject = {};
-                        headers.forEach((header, index) => {
-                            if (header) {
-                                rowObject[String(header).trim()] = rowArray[index];
-                            }
-                        });
-                        return rowObject;
-                    });
-                    allData.push(...jsonData);
-                } else {
-                    currentLogging.log(`Arquivo ${folder} ${file} não tem linhas suficientes para extrair cabeçalho. Pulando.`);
-                }
-            } else {
-                const jsonData = XLSX.utils.sheet_to_json(sheet);
-                allData.push(...jsonData);
-            }
-        }
-        
-        const newWorkbook = XLSX.utils.book_new();
-        const newSheet = XLSX.utils.json_to_sheet(allData);
-        XLSX.utils.book_append_sheet(newWorkbook, newSheet, sheetName);
-        const outputPath = path.join(reportsPath, outputName);
-        XLSX.writeFile(newWorkbook, outputPath, { bookType: 'xlsx', type: 'buffer' });
-        currentLogging.log(`Consolidação concluída! Arquivo salvo em: ${outputPath}`);
-    };
-
-    ipcMain.handle('data:consolidate-proconsumidor', (event, args) => runDataTaskInternal("Proconsumidor", consolidateProconsumidorLogic, args, logging));
-    ipcMain.handle('data:consolidate-procon-sp', (event, args) => runDataTaskInternal('Consolidar PROCON_SP', getSimpleConsolidateLogic('PROCON_SP', 'Relatorio_Consolidado_SP.xlsx', 'Consolidado'), args, logging));
-    ipcMain.handle('data:consolidate-consumidor-gov', (event, args) => runDataTaskInternal('Consolidar Consumidor_Gov', getSimpleConsolidateLogic('Consumidor_Gov', 'Relatorio_Consolidado_Gov.xlsx', 'Consolidado_Gov'), args, logging));
-    ipcMain.handle('data:consolidate-procon-sjc', (event, args) => runDataTaskInternal('Consolidar PROCON_SJC', getSimpleConsolidateLogic('PROCON_SJC', 'Relatorio_Consolidado_SJC.xlsx', 'Consolidado_SJC'), args, logging));
-    ipcMain.handle('data:consolidate-procon-campinas', (event, args) => runDataTaskInternal('Consolidar PROCON_CAMPINAS', getSimpleConsolidateLogic('PROCON_CAMPINAS', 'Relatorio_Consolidado_Campinas.xlsx', 'Consolidado_Campinas'), args, logging));
-    ipcMain.handle('data:consolidate-bcb-rdr', (event, args) => runDataTaskInternal('Consolidar BCB_RDR', getSimpleConsolidateLogic('BCB_RDR', 'Relatorio_Consolidado_BCB_RDR.xlsx', 'Consolidado_BCB'), args, logging));
 
     ipcMain.handle('pipeline:consolidate-all', (event, args) => runTask("Consolidar Relatórios Locais", async (taskArgs, currentLogging) => {
+        const { basePath } = taskArgs;
+        
+        const govReportPath = path.join(basePath, 'Relatorios_Consumidor_Gov');
+        if (fs.existsSync(govReportPath)) {
+            const govFiles = fs.readdirSync(govReportPath).filter(f => f.toLowerCase().endsWith('.xls'));
+            for (const file of govFiles) {
+                const fullPath = path.join(govReportPath, file);
+                preProcessExcelFile(fullPath, {
+                    numberColumns: ['Protocolo', 'CPF']
+                }, currentLogging);
+            }
+        }
+
         await runDataTaskInternal("Proconsumidor", consolidateProconsumidorLogic, taskArgs, currentLogging);
-        await runDataTaskInternal('Consolidar HUGME', getSimpleConsolidateLogic('HUGME', 'Relatorio_Consolidado_HugMe.xlsx', 'Consolidado_HugMe'), taskArgs, currentLogging);
+        await runDataTaskInternal('Consolidar HUGME', getSimpleConsolidateLogic('HUGME', 'Relatorio_Consolidado_HugMe.xlsx', 'Consolidado_HugMe', { range: 3 }), taskArgs, currentLogging);
         await runDataTaskInternal('Consolidar PROCON_SP', getSimpleConsolidateLogic('PROCON_SP', 'Relatorio_Consolidado_SP.xlsx', 'Consolidado'), taskArgs, currentLogging);
         await runDataTaskInternal('Consolidar Consumidor_Gov', getSimpleConsolidateLogic('Consumidor_Gov', 'Relatorio_Consolidado_Gov.xlsx', 'Consolidado_Gov'), taskArgs, currentLogging);
         await runDataTaskInternal('Consolidar PROCON_SJC', getSimpleConsolidateLogic('PROCON_SJC', 'Relatorio_Consolidado_SJC.xlsx', 'Consolidado_SJC'), taskArgs, currentLogging);
         await runDataTaskInternal('Consolidar PROCON_CAMPINAS', getSimpleConsolidateLogic('PROCON_CAMPINAS', 'Relatorio_Consolidado_Campinas.xlsx', 'Consolidado_Campinas'), taskArgs, currentLogging);
-        await runDataTaskInternal('Consolidar BCB_RDR', getSimpleConsolidateLogic('BCB_RDR', 'Relatorio_Consolidado_BCB_RDR.xlsx', 'Consolidado_BCB'), taskArgs, currentLogging);
+        await runDataTaskInternal('Consolidar BCB_RDR', getSimpleConsolidateLogic('BCB_RDR', 'Relatorio_Consolidado_BCB_RDR.xlsx', 'Consolidado_BCB', { header: 1, range: 2, defval: null }), taskArgs, currentLogging);
     }, logging, args));
 
 
     ipcMain.handle('pipeline:create-raw-base', (event, args) => runTask("Criar Base Bruta Local", async (taskArgs, currentLogging) => {
-        const { basePath } = taskArgs;
         const FONTES_DE_DADOS = {
-            "Gov": "Relatorios_Consumidor_Gov/Relatorio_Consolidado_Gov.xlsx",
-            "Proconsumidor": "Relatorios_PROCONSUMIDOR/Relatorio_Consolidado.xlsx",
-            "SP": "Relatorios_PROCON_SP/Relatorio_Consolidado_SP.xlsx",
-            "SJC": "Relatorios_PROCON_SJC/Relatorio_Consolidado_SJC.xlsx",
-            "Campinas": "Relatorios_PROCON_CAMPINAS/Relatorio_Consolidado_Campinas.xlsx",
-            "Uberlandia": "Relatorios_PROCON_UBERLANDIA/Relatorio_API_Uberlandia.xlsx",
-            "BCB_RDR": "Relatorios_BCB_RDR/Relatorio_Consolidado_BCB_RDR.xlsx",
-            "HugMe": "Relatorios_HUGME/Relatorio_Consolidado_HugMe.xlsx"
+            "Gov": { path: "Relatorios_Consumidor_Gov/Relatorio_Consolidado_Gov.xlsx"},
+            "Proconsumidor": { path: "Relatorios_PROCONSUMIDOR/Relatorio_Consolidado.xlsx"},
+            "SP": { path: "Relatorios_PROCON_SP/Relatorio_Consolidado_SP.xlsx"},
+            "SJC": { path: "Relatorios_PROCON_SJC/Relatorio_Consolidado_SJC.xlsx"},
+            "Campinas": { path: "Relatorios_PROCON_CAMPINAS/Relatorio_Consolidado_Campinas.xlsx"},
+            "Uberlandia": { path: "Relatorios_PROCON_UBERLANDIA/Relatorio_API_Uberlandia.xlsx"},
+            "BCB_RDR": { path: "Relatorios_BCB_RDR/Relatorio_Consolidado_BCB_RDR.xlsx"},
+            "HugMe": { path: "Relatorios_HUGME/Relatorio_Consolidado_HugMe.xlsx"}
         };
-
-        const POTENTIAL_DATE_COLUMNS = [
-            'Data Abertura', 'Data Resposta', 'Data Finalização', 'Data de Abertura', 'Data da Finalização',
-            'DataDaSolicitacao', 'DataDaBaixa', 'DataDeRepostaDoFornecedor', 'Data Reclamação', 
-            'Data de Resposta', 'Disponibilização', 'Data do Encerramento', 'Prazo'
-        ];
 
         const outputWorkbook = XLSX.utils.book_new();
         let fontesCopiadas = 0;
 
-        for (const [sheetName, filePath] of Object.entries(FONTES_DE_DADOS)) {
-            const fullPath = path.join(taskArgs.basePath, filePath);
+        for (const [sheetName, sourceInfo] of Object.entries(FONTES_DE_DADOS)) {
+            const fullPath = path.join(taskArgs.basePath, sourceInfo.path);
             if (fs.existsSync(fullPath)) {
                 try {
                     currentLogging.log(`Processando fonte: ${sheetName}`);
-                    const workbook = XLSX.readFile(fullPath);
+                    const workbook = XLSX.readFile(fullPath, { cellDates: false });
                     const sourceSheetName = workbook.SheetNames[0];
                     const sourceSheet = workbook.Sheets[sourceSheetName];
 
-                    if (!sourceSheet) {
-                        currentLogging.log(` -> Aviso: Nenhuma planilha encontrada no arquivo da fonte ${sheetName}. Pulando.`);
+                    if (!sourceSheet || !sourceSheet['!ref']) {
+                        currentLogging.log(` -> Aviso: Nenhuma planilha ou dados encontrados no arquivo da fonte ${sheetName}. Pulando.`);
                         continue;
                     }
-
-                    const jsonData = XLSX.utils.sheet_to_json(sourceSheet);
-
-                    if (jsonData.length > 0) {
-                        jsonData.forEach(row => {
-                            POTENTIAL_DATE_COLUMNS.forEach(colName => {
-                                if (row.hasOwnProperty(colName)) {
-                                    row[colName] = unifiedDateParser(row[colName]);
-                                }
-                            });
-                        });
-                        const newSheet = XLSX.utils.json_to_sheet(jsonData);
-                        XLSX.utils.book_append_sheet(outputWorkbook, newSheet, sheetName);
-                        fontesCopiadas++;
-                    } else {
-                        currentLogging.log(` -> Aviso: Fonte ${sheetName} está vazia.`);
-                    }
+                    XLSX.utils.book_append_sheet(outputWorkbook, sourceSheet, sheetName);
+                    fontesCopiadas++;
                 } catch (e) {
-                    currentLogging.errorTask(`Falha ao processar ${fullPath}: ${e}`);
+                    currentLogging.errorTask(`Falha ao processar ${fullPath}: ${e.stack}`);
                 }
             } else {
                 currentLogging.log(` -> Aviso: Arquivo não encontrado, pulando: ${fullPath}`);
@@ -482,10 +461,44 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         const inputPath = path.join(basePath, "Base_Mae_Bruta.xlsx");
         if (!fs.existsSync(inputPath)) throw new Error("Arquivo Base_Mae_Bruta.xlsx não encontrado. Execute a etapa 'Criar Base Bruta Local' primeiro.");
 
-        const workbook = XLSX.readFile(inputPath);
+        const workbook = XLSX.readFile(inputPath, { cellDates: false });
         const allData = [];
 
         const cleanDoc = (doc) => doc ? String(doc).replace(/\D/g, '').padStart(11, '0') : '';
+        
+        const standardizeDateString = (dateValue) => {
+            if (!dateValue) return '';
+            let date = null;
+            
+            if (!isNaN(dateValue) && Number(dateValue) > 1 && String(dateValue).indexOf('.') === -1) {
+                const excelDate = new Date(Math.round((Number(dateValue) - 25569) * 86400 * 1000));
+                excelDate.setMinutes(excelDate.getMinutes() + excelDate.getTimezoneOffset());
+                date = excelDate;
+            } else if (typeof dateValue === 'string') {
+                const datePart = dateValue.split(' ')[0];
+                if (datePart.includes('-')) {
+                    const parts = datePart.split('-');
+                    if (parts.length === 3) date = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+                } else if (datePart.includes('/')) {
+                    const parts = datePart.split('/');
+                    if (parts.length === 3) {
+                        let day, month, year;
+                         if (parts[2].length === 4) {
+                            day = parseInt(parts[0], 10);
+                            month = parseInt(parts[1], 10);
+                            year = parseInt(parts[2], 10);
+                        } else {
+                            day = parseInt(parts[0], 10);
+                            month = parseInt(parts[1], 10);
+                            year = parseInt(parts[2], 10) + 2000;
+                        }
+                        date = new Date(Date.UTC(year, month - 1, day));
+                    }
+                }
+            }
+            
+            return (date && !isNaN(date.getTime())) ? formatDate(date) : String(dateValue);
+        };
 
         const renameMaps = {
             Gov: {'Protocolo': 'Protocolo_Origem', 'Canal de Origem': 'Canal_Origem', 'Consumidor': 'Consumidor_Nome', 'CPF': 'Consumidor_CPF', 'UF': 'Consumidor_UF', 'Cidade': 'Consumidor_Cidade', 'Sexo': 'Consumidor_Genero', 'Faixa Etária': 'Consumidor_Faixa_Etaria', 'Data Abertura': 'Data_Abertura', 'Data Resposta': 'Data_Resposta_Fornecedor', 'Data Finalização': 'Data_Finalizacao', 'Nome Fantasia': 'Fornecedor_Empresa', 'Problema': 'Descricao_Reclamacao', 'Situação': 'Status_Atual', 'Avaliação Reclamação': 'Resultado_Final', 'Nota do Consumidor': 'Nota_Consumidor', 'Prazo Resposta': 'Prazo_Resposta'},
@@ -500,21 +513,21 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
 
         for (const sheetName of workbook.SheetNames) {
             currentLogging.log(`Processando e padronizando aba: ${sheetName}`);
-            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {raw: true, cellDates: true, defval: null});
+            let jsonData;
+            if (sheetName === 'BCB_RDR' || sheetName === 'SJC' || sheetName === 'Campinas') {
+                 jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false, range: 1 });
+            } else {
+                 jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false });
+            }
+
             const renameMap = renameMaps[sheetName] || {};
             
             const processedData = jsonData.map(row => {
                 const newRow = { Fonte_Dados: sheetName };
-                const tempFINAL_COLUMNS_ORDER_LOCAL = [ 'ID_Reclamacao_Unico', 'Protocolo_Origem', 'Fonte_Dados', 'Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta', 'Canal_Origem', 'Consumidor_Nome', 'Consumidor_CPF', 'Consumidor_Cidade', 'Consumidor_UF', 'Consumidor_Email', 'Consumidor_Celular', 'Consumidor_Faixa_Etaria', 'Consumidor_Genero', 'Fornecedor_Empresa', 'Descricao_Reclamacao', 'Status_Atual', 'Resultado_Final' ];
-                tempFINAL_COLUMNS_ORDER_LOCAL.forEach(col => newRow[col] = null);
-
                 for (const [oldKey, value] of Object.entries(row)) {
                     const newKey = renameMap[oldKey] || oldKey;
-                    if (tempFINAL_COLUMNS_ORDER_LOCAL.includes(newKey)) { 
-                        newRow[newKey] = value;
-                    }
+                    newRow[newKey] = value;
                 }
-                
                 return newRow;
             });
             allData.push(...processedData);
@@ -533,17 +546,37 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
                 currentLogging.log(`AVISO: Protocolo_Origem para ${row.Fonte_Dados} estava vazio ou nulo. ID_Reclamacao_Unico gerado com sufixo único: ${row.Fonte_Dados}_${protocol}`);
             }
             finalRow.ID_Reclamacao_Unico = `${row.Fonte_Dados}_${protocol}`;
-
-            const POTENTIAL_DATE_COLUMNS_LOCAL = ['Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta'];
-            POTENTIAL_DATE_COLUMNS_LOCAL.forEach(colName => {
-                finalRow[colName] = unifiedDateParser(row[colName]);
-            });
             finalRow.Consumidor_CPF = cleanDoc(row.Consumidor_CPF);
+            
+            const dateColsToFormat = ['Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta'];
+            for (const col of dateColsToFormat) {
+                if (finalRow[col]) {
+                     finalRow[col] = standardizeDateString(finalRow[col]);
+                }
+            }
 
             return finalRow;
         });
 
         const finalSheet = XLSX.utils.json_to_sheet(finalData, { header: FINAL_COLUMNS_ORDER_LOCAL });
+        
+        const stringCols = ['Protocolo_Origem', 'ID_Reclamacao_Unico'];
+        const headerIndex = FINAL_COLUMNS_ORDER_LOCAL.reduce((acc, col, i) => { acc[col] = i; return acc; }, {});
+        const range = XLSX.utils.decode_range(finalSheet['!ref']);
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+            for (const colName of stringCols) {
+                const C = headerIndex[colName];
+                if (C !== undefined) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                    const cell = finalSheet[cellAddress];
+                    if (cell && cell.v) {
+                        cell.t = 's';
+                        cell.v = String(cell.v);
+                    }
+                }
+            }
+        }
+        
         const finalWorkbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(finalWorkbook, finalSheet, 'Base_Mae_Final');
         const outputPath = path.join(taskArgs.basePath, "Base_Mae_Final.xlsx");
@@ -551,144 +584,143 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         currentLogging.log(`Base Mãe Final gerada com ${finalData.length} registros em: ${outputPath}`);
     }, logging, args));
 
-    ipcMain.handle('pipeline:upload-master-base-to-sheets', (event, args) => runTask("Upload Base Mãe para Google Sheets", async (taskArgs, currentLogging) => {
-        const { basePath } = taskArgs;
-        const sheets = getSheetsService();
+ipcMain.handle('pipeline:upload-master-base-to-sheets', (event, args) => runTask("Upload Base Mãe para Google Sheets", async (taskArgs, currentLogging) => {
+    const { basePath } = taskArgs;
+    const sheets = getSheetsService();
 
-        const inputPath = path.join(basePath, "Base_Mae_Final.xlsx");
-        if (!fs.existsSync(inputPath)) {
-            throw new Error("Arquivo Base_Mae_Final.xlsx não encontrado. Por favor, execute a etapa 'Gerar Base Mãe Final Local' primeiro.");
-        }
+    const inputPath = path.join(basePath, "Base_Mae_Final.xlsx");
+    if (!fs.existsSync(inputPath)) {
+        throw new Error("Arquivo Base_Mae_Final.xlsx não encontrado. Por favor, execute a etapa 'Gerar Base Mãe Final Local' primeiro.");
+    }
 
-        const workbook = XLSX.readFile(inputPath);
-        const sheet = workbook.Sheets[workbook.SheetNames.find(name => name === 'Base_Mae_Final') || workbook.SheetNames[0]]; 
-        const allLocalData = XLSX.utils.sheet_to_json(sheet, {raw: true, cellDates: true, defval: null});
+    const workbook = XLSX.readFile(inputPath, { cellDates: false });
+    const sheet = workbook.Sheets[workbook.SheetNames.find(name => name === 'Base_Mae_Final') || workbook.SheetNames[0]]; 
+    const allLocalData = XLSX.utils.sheet_to_json(sheet, { raw: false });
 
-        const FINAL_COLUMNS_ORDER_SHEETS = [
-            'ID_Reclamacao_Unico', 'Protocolo_Origem', 'Fonte_Dados', 'Data_Abertura',
-            'Data_Finalizacao', 'Prazo_Resposta', 'Canal_Origem', 'Consumidor_Nome',
-            'Consumidor_CPF', 'Consumidor_Cidade', 'Consumidor_UF', 'Consumidor_Email',
-            'Consumidor_Celular', 'Consumidor_Faixa_Etaria', 'Consumidor_Genero',
-            'Fornecedor_Empresa',
-            'Descricao_Reclamacao', 'Status_Atual', 'Resultado_Final',
-            'OPERADOR', 'RESPONSAVEL_TRELLO', 'STATUS', 'ID_Card_Trello'
-        ];
+    const FINAL_COLUMNS_ORDER_SHEETS = [
+        'ID_Reclamacao_Unico', 'Protocolo_Origem', 'Fonte_Dados', 'Data_Abertura',
+        'Data_Finalizacao', 'Prazo_Resposta', 'Canal_Origem', 'Consumidor_Nome',
+        'Consumidor_CPF', 'Consumidor_Cidade', 'Consumidor_UF', 'Consumidor_Email',
+        'Consumidor_Celular', 'Consumidor_Faixa_Etaria', 'Consumidor_Genero',
+        'Fornecedor_Empresa', 'Descricao_Reclamacao', 'Status_Atual', 'Resultado_Final',
+        'OPERADOR', 'RESPONSAVEL_TRELLO', 'STATUS', 'ID_Card_Trello'
+    ];
+    
+    const cleanDoc = (doc) => {
+        if (!doc) return null;
+        return String(doc).replace(/\D/g, '').padStart(11, '0');
+    };
 
-        const POTENTIAL_DATE_COLUMNS_UPLOAD = [
-            'Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta'
-        ];
+    const processedDataForUpload = allLocalData.map(row => {
+        const newRow = {};
+        FINAL_COLUMNS_ORDER_SHEETS.forEach(col => newRow[col] = row[col] || null);
+        newRow.Consumidor_CPF = cleanDoc(newRow.Consumidor_CPF);
+        newRow.STATUS = newRow.STATUS || 'Novo';
+        return newRow;
+    });
 
-        const cleanDoc = (doc) => {
-            if (!doc) return null;
-            return String(doc).replace(/\D/g, '').padStart(11, '0');
-        };
+    currentLogging.log("Processamento para upload concluído. Verificando dados no Google Sheets para append...");
 
-        const processedDataForUpload = allLocalData.map(row => {
-            const newRow = {};
-            FINAL_COLUMNS_ORDER_SHEETS.forEach(col => newRow[col] = null); 
+    const googleSheetRange = `Base_Mae_Final!A:${getColumnLetter(FINAL_COLUMNS_ORDER_SHEETS.length -1)}`;
+    const existingDataResponse = await sheets.spreadsheets.values.get({ spreadsheetId, range: googleSheetRange });
+    const existingGoogleSheetData = existingDataResponse.data.values;
+    let existingGoogleSheetIdMap = new Map();
+    
+    const firstNewRowIndex = existingGoogleSheetData ? existingGoogleSheetData.length : 0;
 
-            for (const originalKey in row) {
-                if (row.hasOwnProperty(originalKey)) {
-                    const value = row[originalKey];
-                    if (FINAL_COLUMNS_ORDER_SHEETS.includes(originalKey)) {
-                        newRow[originalKey] = value;
-                    }
-                }
-            }
-
-            newRow.Consumidor_CPF = cleanDoc(newRow.Consumidor_CPF);
-            
-            if (!newRow.ID_Reclamacao_Unico || newRow.ID_Reclamacao_Unico.trim() === '' || newRow.ID_Reclamacao_Unico === newRow.Fonte_Dados) {
-                 newRow.ID_Reclamacao_Unico = `${newRow.Fonte_Dados || 'Unknown'}_${Math.random().toString(36).substring(2, 10)}`; 
-                 currentLogging.log(`AVISO: ID_Reclamacao_Unico estava vazio no arquivo local para um registro. Gerado um novo: ${newRow.ID_Reclamacao_Unico}`);
-            }
-
-            POTENTIAL_DATE_COLUMNS_UPLOAD.forEach(colName => {
-                if (newRow[colName]) {
-                    let dateValue = newRow[colName];
-                    if (dateValue instanceof Date) {
-                        newRow[colName] = formatDate(dateValue);
-                    } else if (typeof dateValue === 'number' && dateValue > 1) {
-                        const excelDate = new Date(Math.round((dateValue - 25569) * 86400 * 1000));
-                        newRow[colName] = formatDate(excelDate);
-                    }
-                    else {
-                        const parsed = parseDate(String(dateValue));
-                        if (parsed && !isNaN(parsed)) newRow[colName] = formatDate(parsed);
-                        else newRow[colName] = null;
-                    }
-                }
-            });
-
-            newRow.OPERADOR = newRow.OPERADOR || null;
-            newRow.RESPONSAVEL_TRELLO = newRow.RESPONSAVEL_TRELLO || null;
-            newRow.STATUS = newRow.STATUS || 'Novo';
-            newRow.ID_Card_Trello = newRow.ID_Card_Trello || null;
-
-            return newRow;
-        });
-
-        currentLogging.log("Processamento para upload concluído. Verificando dados no Google Sheets para append...");
-
-        const googleSheetRange = `Base_Mae_Final!A:${getColumnLetter(FINAL_COLUMNS_ORDER_SHEETS.length -1)}`;
-        const existingDataResponse = await sheets.spreadsheets.values.get({ spreadsheetId, range: googleSheetRange });
-        const existingGoogleSheetData = existingDataResponse.data.values;
-        let existingGoogleSheetIdMap = new Map();
-        
-        if (existingGoogleSheetData && existingGoogleSheetData.length > 0) {
-             const existingHeaders = existingGoogleSheetData[0];
-             const idReclamacaoUnicoIndex = existingHeaders.indexOf('ID_Reclamacao_Unico');
-             if (idReclamacaoUnicoIndex !== -1) {
-                 for(let i = 1; i < existingGoogleSheetData.length; i++) {
-                     if (existingGoogleSheetData[i][idReclamacaoUnicoIndex]) {
-                         existingGoogleSheetIdMap.set(existingGoogleSheetData[i][idReclamacaoUnicoIndex], existingGoogleSheetData[i]);
-                     }
+    if (existingGoogleSheetData && existingGoogleSheetData.length > 0) {
+         const existingHeaders = existingGoogleSheetData[0];
+         const idReclamacaoUnicoIndex = existingHeaders.indexOf('ID_Reclamacao_Unico');
+         if (idReclamacaoUnicoIndex !== -1) {
+             for(let i = 1; i < existingGoogleSheetData.length; i++) {
+                 if (existingGoogleSheetData[i][idReclamacaoUnicoIndex]) {
+                     existingGoogleSheetIdMap.set(existingGoogleSheetData[i][idReclamacaoUnicoIndex], existingGoogleSheetData[i]);
                  }
-             } else {
-                 currentLogging.log("Aviso: 'ID_Reclamacao_Unico' não encontrado nos cabeçalhos da Base_Mae_Final no Google Sheets. Todos os registros serão considerados novos.");
              }
-        }
-       
-        const dataToAppend = [];
-        let totalNewRecords = 0;
-
-        for (const record of processedDataForUpload) {
-            if (!record.ID_Reclamacao_Unico) {
-                currentLogging.log(`AVISO: Registro sem ID_Reclamacao_Unico válido após processamento para upload, pulando-o. Registro: ${JSON.stringify(record)}`);
-                continue;
-            }
-
-            if (!existingGoogleSheetIdMap.has(record.ID_Reclamacao_Unico)) {
-                const rowValues = FINAL_COLUMNS_ORDER_SHEETS.map(col => record[col] || null);
-                dataToAppend.push(rowValues);
-                totalNewRecords++;
-            }
+         } else {
+             currentLogging.log("Aviso: 'ID_Reclamacao_Unico' não encontrado nos cabeçalhos da Base_Mae_Final. Todos os registros locais serão considerados novos.");
+         }
+    }
+   
+    const dataToAppend = [];
+    for (const record of processedDataForUpload) {
+        if (!record.ID_Reclamacao_Unico) {
+            currentLogging.log(`AVISO: Registro sem ID_Reclamacao_Unico válido, pulando-o. Registro: ${JSON.stringify(record)}`);
+            continue;
         }
 
-        if (totalNewRecords > 0) {
-            if (!existingGoogleSheetData || existingGoogleSheetData.length === 0) {
-                currentLogging.log("Adicionando cabeçalhos à Base_Mae_Final no Google Sheets.");
-                await sheets.spreadsheets.values.append({
-                    spreadsheetId,
-                    range: `Base_Mae_Final!A1`,
-                    valueInputOption: 'USER_ENTERED',
-                    insertDataOption: 'INSERT_ROWS',
-                    requestBody: { values: [FINAL_COLUMNS_ORDER_SHEETS] }
-                });
-            }
-            currentLogging.log(`Adicionando ${totalNewRecords} novos registros à Base_Mae_Final no Google Sheets.`);
+        if (!existingGoogleSheetIdMap.has(record.ID_Reclamacao_Unico)) {
+            const rowValues = FINAL_COLUMNS_ORDER_SHEETS.map(col => record[col] || null);
+            dataToAppend.push(rowValues);
+        }
+    }
+
+   if (dataToAppend.length > 0) {
+        if (!existingGoogleSheetData || existingGoogleSheetData.length === 0) {
+            currentLogging.log("Adicionando cabeçalhos à Base_Mae_Final no Google Sheets.");
             await sheets.spreadsheets.values.append({
                 spreadsheetId,
                 range: `Base_Mae_Final!A1`,
                 valueInputOption: 'USER_ENTERED',
                 insertDataOption: 'INSERT_ROWS',
-                requestBody: { values: dataToAppend }
+                requestBody: { values: [FINAL_COLUMNS_ORDER_SHEETS] }
             });
-        } else {
-            currentLogging.log("Nenhum registro novo para adicionar à Base_Mae_Final no Google Sheets.");
         }
-        currentLogging.log("Upload da Base Mãe Final para o Google Sheets concluído.");
-    }, logging, args));
+        currentLogging.log(`Adicionando ${dataToAppend.length} novos registros à Base_Mae_Final no Google Sheets.`);
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: `Base_Mae_Final!A1`,
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: dataToAppend }
+        });
+
+        currentLogging.log("Aplicando formatação de data nas colunas D, E e F para os novos registros...");
+        const sheetInfo = await sheets.spreadsheets.get({ spreadsheetId });
+        const sheetId = sheetInfo.data.sheets.find(s => s.properties.title === 'Base_Mae_Final').properties.sheetId;
+
+        const dateColumnIndices = [3, 4, 5]; 
+        const formatRequests = [];
+
+        for (const columnIndex of dateColumnIndices) {
+            const request = {
+                repeatCell: {
+                    range: {
+                        sheetId: sheetId,
+                        startRowIndex: firstNewRowIndex,
+                        endRowIndex: firstNewRowIndex + dataToAppend.length,
+                        startColumnIndex: columnIndex,
+                        endColumnIndex: columnIndex + 1 
+                    },
+                    cell: {
+                        userEnteredFormat: {
+                            numberFormat: {
+                                type: "DATE",
+                                pattern: "dd/mm/yyyy"
+                            }
+                        }
+                    },
+                    fields: "userEnteredFormat.numberFormat"
+                }
+            };
+            formatRequests.push(request);
+        }
+
+        if (formatRequests.length > 0) {
+            await sheets.spreadsheets.batchUpdate({
+                spreadsheetId,
+                requestBody: {
+                    requests: formatRequests 
+                }
+            });
+            currentLogging.log("Formatação de data aplicada com sucesso.");
+        }
+
+    } else {
+        currentLogging.log("Nenhum registro novo para adicionar à Base_Mae_Final no Google Sheets.");
+    }
+    currentLogging.log("Upload da Base Mãe Final para o Google Sheets concluído.");
+}, logging, args));
 
     ipcMain.handle('api:fetch-uberlandia', (event, args) => runTask("API Procon Uberlândia", async (taskArgs, currentLogging) => {
         const { basePath, startDate, endDate } = taskArgs;
@@ -740,6 +772,11 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
                 'UF Credenciada': "MG",
             };
         });
+
+        if (processedData.length === 0) {
+            currentLogging.log("Nenhum dado da API do Procon Uberlândia encontrado para o período. O arquivo não será gerado.");
+            return;
+        }
     
         const outputPath = path.join(basePath, "Relatorios_PROCON_UBERLANDIA", "Relatorio_API_Uberlandia.xlsx");
         fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -750,33 +787,39 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         currentLogging.log(`Dados da API salvos em: ${outputPath}`);
     }, logging, args));
 
-    ipcMain.handle('search:find-cpf', async (event, args) => {
+    ipcMain.handle('search:find-cpf', (event, args) => runTask('Buscar CPF na Base Online', async (taskArgs, currentLogging) => {
         const sheets = getSheetsService();
-        const { cpf } = args;
+        const { cpf } = taskArgs;
         const cleanCPF = String(cpf).replace(/\D/g, '');
-        logging.log(`Buscando por CPF: ${cleanCPF}`);
+        currentLogging.log(`Buscando por CPF na base online: ${cleanCPF}`);
         const response = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Base_Mae_Final!A:W' });
         const allData = arraysToObjects(response.data.values);
         const results = allData.filter(row => String(row['Consumidor_CPF'] || '').replace(/\D/g, '') === cleanCPF)
             .map(row => ({
-                nome: row['Consumidor_Nome'], protocolo: row['Protocolo_Origem'], fonte: row['Fonte_Dados'],
-                dataAbertura: row['Data_Abertura'], dataFinalizacao: row['Data_Finalizacao'], status: row['Status_Atual']
+                nome: row['Consumidor_Nome'],
+                protocolo: row['Protocolo_Origem'],
+                fonte: row['Fonte_Dados'],
+                dataAbertura: row['Data_Abertura'],
+                dataFinalizacao: row['Data_Finalizacao'],
+                status: row['Status_Atual']
             }));
         return { count: results.length, cpf: cleanCPF, results: results };
-    });
+    }, logging, args));
 
-    ipcMain.handle('search:find-audiencias', async (event, args) => {
+    ipcMain.handle('search:find-audiencias', (event, args) => runTask('Buscar Audiências na Base Online', async (taskArgs, currentLogging) => {
         const sheets = getSheetsService();
-        logging.log(`Buscando por audiências...`);
+        currentLogging.log(`Buscando por audiências na base online...`);
         const response = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Base_Mae_Final!A:W' });
         const allData = arraysToObjects(response.data.values);
         const results = allData.filter(row => String(row['Status_Atual'] || '').toLowerCase().includes('audiência'))
             .map(row => ({
-                Protocolo_Origem: row['Protocolo_Origem'], Consumidor_Nome: row['Consumidor_Nome'],
-                Data_Abertura: row['Data_Abertura'], Prazo_Resposta: row['Prazo_Resposta']
+                Protocolo_Origem: row['Protocolo_Origem'],
+                Consumidor_Nome: row['Consumidor_Nome'],
+                Data_Abertura: row['Data_Abertura'],
+                Prazo_Resposta: row['Prazo_Resposta']
             }));
         return { count: results.length, audiencias: results };
-    });
+    }, logging, args));
 }
 
 module.exports = { registerDataHandlers };

@@ -87,23 +87,52 @@ function registerAuthHandlers(ipcMain, logging, { BrowserWindow, session, getGoo
         }
     };
 
-    ipcMain.handle('auth:app-login', (event, { username, password }) => runTask('Autenticação do Usuário', async () => {
+    ipcMain.handle('auth:app-login', (event, { username, password, userType }) => runTask('Autenticação do Usuário', async () => {
         const sheets = google.sheets({ version: 'v4', auth: getGoogleAuthClient() });
         const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-        const [managersResponse, accessResponse] = await Promise.all([
-             sheets.spreadsheets.values.get({ spreadsheetId, range: 'Gestores!A:D' }),
-             sheets.spreadsheets.values.get({ spreadsheetId, range: 'Acessos_Quadros!A:B' }),
-        ]);
-        const managers = arraysToObjects(managersResponse.data.values);
-        const accessRules = arraysToObjects(accessResponse.data.values);
-        const foundManager = managers.find(m => m.Nome_Gestor === username && m.CPF_Gestor === password);
-        if (foundManager) {
-            const allowedBoardIds = accessRules.filter(rule => rule.ID_Gestor_Trello === foundManager.ID_Trello).map(rule => rule.ID_Quadro_Trello);
-            const user = { name: foundManager.Nome_Gestor, trelloId: foundManager.ID_Trello, trelloUsername: foundManager.Username_Trello, allowedBoardIds };
-            logging.log(`Usuário '${username}' autenticado. Acesso a ${allowedBoardIds.length} quadro(s).`);
-            return { success: true, user };
+
+        if (!userType) {
+            throw new Error("O tipo de perfil (Gestor ou Analista) não foi especificado.");
+        }
+
+        if (userType === 'gestor') {
+            const [managersResponse, accessResponse] = await Promise.all([
+                sheets.spreadsheets.values.get({ spreadsheetId, range: 'Gestores!A:D' }),
+                sheets.spreadsheets.values.get({ spreadsheetId, range: 'Acessos_Quadros!A:B' }),
+            ]);
+            const managers = arraysToObjects(managersResponse.data.values);
+            const accessRules = arraysToObjects(accessResponse.data.values);
+            const foundManager = managers.find(m => m.Nome_Gestor === username && m.CPF_Gestor === password);
+            if (foundManager) {
+                const allowedBoardIds = accessRules.filter(rule => rule.ID_Gestor_Trello === foundManager.ID_Trello).map(rule => rule.ID_Quadro_Trello);
+                const user = { 
+                    name: foundManager.Nome_Gestor, 
+                    trelloId: foundManager.ID_Trello, 
+                    trelloUsername: foundManager.Username_Trello, 
+                    allowedBoardIds,
+                    role: 'gestor'
+                };
+                logging.log(`Usuário Gestor '${username}' autenticado. Acesso a ${allowedBoardIds.length} quadro(s).`);
+                return { success: true, user };
+            } else {
+                throw new Error("Nome de gestor ou CPF inválidos.");
+            }
+        } else if (userType === 'analista') {
+            const analystsResponse = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Analistas!A:D' });
+            const analysts = arraysToObjects(analystsResponse.data.values);
+            const foundAnalyst = analysts.find(a => a.Nome_Analista === username && a.CPF_Analista === password);
+            if (foundAnalyst) {
+                const user = {
+                    name: foundAnalyst.Nome_Analista,
+                    role: 'analista'
+                };
+                logging.log(`Usuário Analista '${username}' autenticado.`);
+                return { success: true, user };
+            } else {
+                throw new Error("Nome de analista ou CPF inválidos.");
+            }
         } else {
-            throw new Error("Nome de usuário ou CPF inválidos.");
+            throw new Error(`Tipo de perfil desconhecido: ${userType}`);
         }
     }, logging));
     

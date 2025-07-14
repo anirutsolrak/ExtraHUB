@@ -48,11 +48,11 @@ const parseDate = (str) => {
 
     const [day, month, year] = parts.map(p => parseInt(p, 10));
 
-    if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1900) return null;
+    if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return null;
 
-    const date = new Date(year, month - 1, day);
+    const date = new Date(Date.UTC(year, month - 1, day));
 
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
         return null;
     }
 
@@ -61,7 +61,10 @@ const parseDate = (str) => {
 
 const formatDate = (date) => {
     if (!(date instanceof Date) || isNaN(date)) return '';
-    return date.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    return `${day}/${month}/${year}`;
 };
 
 module.exports = {
