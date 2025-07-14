@@ -124,9 +124,11 @@ function registerAuthHandlers(ipcMain, logging, { BrowserWindow, session, getGoo
             if (foundAnalyst) {
                 const user = {
                     name: foundAnalyst.Nome_Analista,
-                    role: 'analista'
+                    role: 'analista',
+                    boardId: foundAnalyst.ID_Quadro_Trello,
+                    trelloLabelName: foundAnalyst.Nome_Analista
                 };
-                logging.log(`Usuário Analista '${username}' autenticado.`);
+                logging.log(`Usuário Analista '${username}' autenticado. Associado ao quadro ${user.boardId}.`);
                 return { success: true, user };
             } else {
                 throw new Error("Nome de analista ou CPF inválidos.");

@@ -21,4 +21,4 @@ yarn-error.log*
 *.swp
 
 # NÃO ignore o .env (será versionado)
-# !.env
+!.env

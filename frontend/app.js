@@ -131,7 +131,7 @@ function App() {
 
     const renderContent = () => {
         const isManager = currentUser && currentUser.role === 'gestor';
-        const managerOnlyTabs = ['atribuicao', 'access-management', 'automations', 'pipeline'];
+        const managerOnlyTabs = ['atribuicao', 'access-management', 'automations', 'pipeline', 'audiencias'];
         
         if (!isManager && managerOnlyTabs.includes(activeTab)) {
             return <div className="text-center p-8"><p>Acesso negado. Esta área é restrita para gestores.</p></div>;
@@ -198,7 +198,7 @@ function App() {
         if (!currentUser || !currentUser.role) return false;
         if (currentUser.role === 'gestor') return true; 
         if (currentUser.role === 'analista') {
-            const analystAllowed = ['home', 'consult', 'audiencias', 'settings'];
+            const analystAllowed = ['home', 'consult', 'settings'];
             return analystAllowed.includes(item.id);
         }
         return false;
