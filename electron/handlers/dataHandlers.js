@@ -3,6 +3,37 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const { runTask, parseDate, formatDate } = require('./utils');
 
+const unifiedDateParser = (dateValue) => {
+    if (!dateValue) return '';
+
+    if (typeof dateValue === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateValue)) {
+        return dateValue;
+    }
+
+    let date = null;
+
+    if (dateValue instanceof Date) {
+        date = dateValue;
+    } else if (typeof dateValue === 'number' && dateValue > 1) {
+        date = new Date(Math.round((dateValue - 25569) * 86400 * 1000));
+    } else if (typeof dateValue === 'string') {
+        let tempValue = dateValue.replace(',', '.');
+
+        if (!isNaN(Number(tempValue))) {
+            const numericValue = Number(tempValue);
+            date = new Date(Math.round((numericValue - 25569) * 86400 * 1000));
+        } else {
+            date = parseDate(dateValue);
+        }
+    }
+
+    if (date && !isNaN(date.getTime())) {
+        return formatDate(date);
+    }
+
+    return '';
+};
+
 function arraysToObjects(arrays) {
     if (!arrays || arrays.length === 0) return [];
     const [headers, ...rows] = arrays;
@@ -395,31 +426,6 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             'Data de Resposta', 'Disponibilização', 'Data do Encerramento', 'Prazo'
         ];
 
-        const standardizeDates = (dateValue) => {
-            if (!dateValue) return dateValue;
-            let finalValue = dateValue;
-            if (typeof finalValue === 'string') {
-                finalValue = finalValue.replace(',', '.');
-            }
-
-            if (typeof finalValue === 'string' && !isNaN(Number(finalValue))) {
-                finalValue = Number(finalValue);
-            }
-
-            let date = new Date(finalValue);
-
-            if (typeof finalValue === 'number' && finalValue > 1) {
-                date = new Date(Math.round((finalValue - 25569) * 86400 * 1000));
-            } else if (typeof finalValue === 'string' && finalValue.includes('/')) {
-                date = parseDate(finalValue);
-            }
-
-            if (date && !isNaN(date.getTime())) {
-                return formatDate(date);
-            }
-            return dateValue;
-        };
-
         const outputWorkbook = XLSX.utils.book_new();
         let fontesCopiadas = 0;
 
@@ -442,8 +448,8 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
                     if (jsonData.length > 0) {
                         jsonData.forEach(row => {
                             POTENTIAL_DATE_COLUMNS.forEach(colName => {
-                                if (row[colName]) {
-                                    row[colName] = standardizeDates(row[colName]);
+                                if (row.hasOwnProperty(colName)) {
+                                    row[colName] = unifiedDateParser(row[colName]);
                                 }
                             });
                         });
@@ -530,21 +536,7 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
 
             const POTENTIAL_DATE_COLUMNS_LOCAL = ['Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta'];
             POTENTIAL_DATE_COLUMNS_LOCAL.forEach(colName => {
-                if (row[colName]) { 
-                    let dateValue = row[colName];
-                    if (dateValue instanceof Date) {
-                        finalRow[colName] = formatDate(dateValue);
-                    } else if (typeof dateValue === 'number' && dateValue > 1) {
-                        const excelDate = new Date(Math.round((dateValue - 25569) * 86400 * 1000));
-                        finalRow[colName] = formatDate(excelDate);
-                    } else { 
-                        const parsed = parseDate(String(dateValue));
-                        if (parsed && !isNaN(parsed)) finalRow[colName] = formatDate(parsed);
-                        else finalRow[colName] = '';
-                    }
-                } else {
-                    finalRow[colName] = '';
-                }
+                finalRow[colName] = unifiedDateParser(row[colName]);
             });
             finalRow.Consumidor_CPF = cleanDoc(row.Consumidor_CPF);
 

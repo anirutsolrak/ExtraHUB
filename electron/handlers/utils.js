@@ -41,11 +41,22 @@ function getChromiumPath() {
 
 const parseDate = (str) => {
     if (!str || typeof str !== 'string') return null;
-    const parts = str.split('/');
+
+    const datePart = str.split(' ')[0];
+    const parts = datePart.split('/');
     if (parts.length !== 3) return null;
-    const [day, month, year] = parts.map(Number);
-    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-    return new Date(year, month - 1, day);
+
+    const [day, month, year] = parts.map(p => parseInt(p, 10));
+
+    if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1900) return null;
+
+    const date = new Date(year, month - 1, day);
+
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+        return null;
+    }
+
+    return date;
 };
 
 const formatDate = (date) => {
