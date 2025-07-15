@@ -458,3 +458,4 @@ A ferramenta utiliza as APIs do Google Sheets e do Trello, ambas configuradas pa
 
 -   **Abra o DevTools**: Em `electron/main_electron.js`, descomente a linha `mainWindow.webContents.openDevTools();`. Isso abrirá o console do Chromium junto com a aplicação, permitindo inspecionar elementos da UI, ver logs do console do frontend e depurar o JavaScript do React.
 -   **Logs de Backend**: Os logs do processo principal (backend) são exibidos diretamente no terminal onde você executou `npm start`. Fique de olho neles para erros de Node.js, Playwright e APIs.
+```
