@@ -1,3 +1,5 @@
+README.md:
+```markdown
 # ExtraHub - Documentação Técnica
 
 Bem-vindo à documentação do ExtraHub, o Hub de Gestão de Automações e Relatórios. Este documento serve como um guia completo para a instalação, uso, desenvolvimento e solução de problemas da aplicação.
@@ -29,15 +31,20 @@ Bem-vindo à documentação do ExtraHub, o Hub de Gestão de Automações e Rela
   - [4.1. Estrutura do Projeto](#41-estrutura-do-projeto)
   - [4.2. Fluxo de Comunicação (Frontend <-> Backend)](#42-fluxo-de-comunicação-frontend---backend)
   - [4.3. Adicionando uma Nova Automação](#43-adicionando-uma-nova-automação)
-- [5. Manutenção, Limitações e Escalabilidade](#5-manutenção-limitações-e-escalabilidade)
-  - [5.1. Gerenciamento de Credenciais Estáticas](#51-gerenciamento-de-credenciais-estáticas)
-  - [5.2. Atualização de URLs e Seletores](#52-atualização-de-urls-e-seletores)
-  - [5.3. Limitações de API e Escalabilidade](#53-limitações-de-api-e-escalabilidade)
-- [6. Solução de Problemas (Troubleshooting)](#6-solução-de-problemas-troubleshooting)
-  - [6.1. Erros de Login](#61-erros-de-login)
-  - [6.2. Falhas nas Automações](#62-falhas-nas-automações)
-  - [6.3. Problemas de Conexão (Google/Trello)](#63-problemas-de-conexão-googletrello)
-  - [6.4. Depuração Geral](#64-depuração-geral)
+  - [4.4. Configurações Avançadas de Desenvolvimento](#44-configurações-avançadas-de-desenvolvimento)
+- [5. Guia de Testes para Desenvolvedores](#5-guia-de-testes-para-desenvolvedores)
+  - [5.1. Aviso Importante sobre Testes](#51-aviso-importante-sobre-testes)
+  - [5.2. Fluxo de Teste Seguro (Simulando o Pipeline)](#52-fluxo-de-teste-seguro-simulando-o-pipeline)
+  - [5.3. Credenciais de Teste](#53-credenciais-de-teste)
+- [6. Manutenção, Limitações e Escalabilidade](#6-manutenção-limitações-e-escalabilidade)
+  - [6.1. Gerenciamento de Credenciais Estáticas](#61-gerenciamento-de-credenciais-estáticas)
+  - [6.2. Atualização de URLs e Seletores](#62-atualização-de-urls-e-seletores)
+  - [6.3. Limitações de API e Escalabilidade](#63-limitações-de-api-e-escalabilidade)
+- [7. Solução de Problemas (Troubleshooting)](#7-solução-de-problemas-troubleshooting)
+  - [7.1. Erros de Login](#71-erros-de-login)
+  - [7.2. Falhas nas Automações](#72-falhas-nas-automações)
+  - [7.3. Problemas de Conexão (Google/Trello)](#73-problemas-de-conexão-googletrello)
+  - [7.4. Depuração Geral](#74-depuração-geral)
 
 ---
 
@@ -88,8 +95,9 @@ A configuração correta dos arquivos de ambiente é **crítica** para o funcion
 
 #### Arquivo `.env`
 
-Na pasta `backend`, crie um arquivo chamado `.env` e preencha as seguintes variáveis com as credenciais apropriadas:
+Na pasta `backend`, crie um arquivo chamado `.env` e preencha as seguintes variáveis com as credenciais apropriadas.
 
+##### Credenciais de Automação
 ```dotenv
 # Credenciais do Proconsumidor (usado para login automatizado)
 CPF=SEU_CPF_DE_LOGIN
@@ -109,13 +117,31 @@ BCB_RDR_SENHA=SENHA_BCB
 
 # Token da API do Procon Uberlândia
 PROCON_UBERLANDIA_TOKEN=SEU_TOKEN_DE_AUTORIZACAO
+```
 
+##### Credenciais de APIs (Google & Trello)
+```dotenv
 # ID da sua planilha principal do Google Sheets
 GOOGLE_SHEET_ID=ID_DA_PLANILHA_VAI_AQUI
 
 # Credenciais da API do Trello
 TRELLO_API_KEY=SUA_CHAVE_DE_API_TRELLO
 TRELLO_API_TOKEN=SEU_TOKEN_DE_API_TRELLO
+```
+
+##### Variáveis Obsoletas (Não utilizadas)
+As seguintes variáveis são de versões antigas e não são mais utilizadas pela aplicação. Podem ser removidas do seu arquivo `.env`.
+```dotenv
+# PROXY_SERVER=
+# CONSUMIDOR_GOV_CPF=
+# CONSUMIDOR_GOV_SENHA=
+# PROCON_MT_USER=
+# PROCON_MT_SENHA=
+# TRELLO_API_SECRET=
+# TRELLO_BOARD_ID=
+# LIST_ID_ENTRANTES=
+# TRELLO_LOGIN_EMAIL=
+# TRELLO_LOGIN_PASSWORD=
 ```
 
 #### Arquivo `service_account.json`
@@ -298,9 +324,84 @@ Exemplo: Adicionar uma automação simples que baixa um arquivo.
 
 A interface será renderizada automaticamente com o novo card, e o fluxo de comunicação já está pronto para executá-lo.
 
-## 5. Manutenção, Limitações e Escalabilidade
+### 4.4. Configurações Avançadas de Desenvolvimento
 
-### 5.1. Gerenciamento de Credenciais Estáticas
+Para criar um ambiente de desenvolvimento ou teste totalmente isolado, você pode alterar os seguintes pontos de conexão:
+
+-   **Mudar a Planilha Google Sheets**:
+    1.  Crie uma nova planilha no Google Sheets com uma cópia das abas (`Base_Mae_Final`, `Gestores`, `Analistas`, `Acessos_Quadros`).
+    2.  Compartilhe esta nova planilha com o `client_email` da sua `service_account.json`, dando permissão de **Editor**.
+    3.  Copie o ID da nova planilha (da URL, por exemplo: `.../spreadsheets/d/ID_DA_PLANILHA/edit`).
+    4.  Cole este novo ID na variável `GOOGLE_SHEET_ID` do seu arquivo `.env`.
+
+-   **Mudar a Organização Trello**:
+    A aplicação está configurada para buscar os quadros de uma organização específica do Trello.
+    1.  O ID desta organização está fixo no código-fonte.
+    2.  Para alterá-lo, abra o arquivo `electron/handlers/dataHandlers.js`.
+    3.  Localize a linha: `const organizationId = "68484f358ac9bdde06499a29";`
+    4.  Substitua o ID pelo da sua organização Trello. Você pode obter o ID da sua organização via API do Trello.
+
+## 5. Guia de Testes para Desenvolvedores
+
+Esta seção descreve como testar as funcionalidades do ExtraHub de forma segura, sem interferir com os dados de produção.
+
+### 5.1. Aviso Importante sobre Testes
+
+**ATENÇÃO:** As seções **Automações** e as etapas iniciais do **Pipeline de Dados** (`Consolidar Relatórios` e `Criar Base Bruta`) interagem com plataformas externas e manipulam dados reais. **NÃO** execute estas automações para testes de interface ou de outras funcionalidades. O uso indevido pode resultar em downloads de dados desnecessários, processamento incorreto de informações de produção e potenciais bloqueios de credenciais.
+
+Utilize as rotinas de automação e pipeline apenas se o objetivo do seu teste for especificamente validar ou depurar essas próprias rotinas.
+
+### 5.2. Fluxo de Teste Seguro (Simulando o Pipeline)
+
+Para testar o fluxo de dados da aplicação (processamento, upload, atribuição) sem executar as automações de download, siga estes passos:
+
+1.  **Crie uma Base Bruta Fictícia**:
+    *   Na sua pasta de trabalho (selecionada em `Configurações`), crie manualmente um arquivo Excel chamado `Base_Mae_Bruta.xlsx`.
+    *   Dentro deste arquivo, crie abas com nomes que correspondam às fontes de dados. O nome da aba é crucial para a aplicação identificar a fonte.
+
+    **Exemplo para Proconsumidor:**
+    *   **Nome da Aba**: A aba deve ser nomeada exatamente como `Proconsumidor`.
+    *   **Posição dos Cabeçalhos**: Os títulos das colunas (cabeçalhos) devem estar na **primeira linha** da planilha (linha 1).
+    *   **Posição dos Dados**: Os dados fictícios devem começar a partir da **segunda linha** (linha 2).
+    *   **Cabeçalhos Obrigatórios**: Para que a padronização funcione, utilize os seguintes nomes de coluna:
+        - `Número de Atendimento`
+        - `Documento Consumidor - CPF/CNPJ`
+        - `Nome Consumidor`
+        - `Gênero do Consumidor`
+        - `Faixa Etária do Consumidor`
+        - `CNPJ ou CPF Fornecedor`
+        - `Razão Social`
+        - `Nome Fantasia`
+        - `Posto de Atendimento`
+        - `Data de Abertura`
+        - `Data da Finalização`
+        - `Situação`
+        - `Classificação da Decisão`
+
+2.  **Execute a Geração da Base Final Local**:
+    *   Vá para a tela `Pipeline de Dados`.
+    *   Clique para executar a etapa **3. Gerar Base Mãe Final Local**.
+    *   Isso irá ler o seu arquivo `Base_Mae_Bruta.xlsx` fictício e criar um novo arquivo, `Base_Mae_Final.xlsx`, na mesma pasta.
+
+3.  **Faça o Upload para o Google Sheets**:
+    *   Ainda na tela `Pipeline de Dados`, execute a etapa **4. Upload Base Mãe para Google Sheets**.
+    *   A aplicação irá comparar seu `Base_Mae_Final.xlsx` local com a planilha online e fará o upload apenas dos seus registros fictícios (que são novos).
+
+4.  **Verifique os Dados na Aplicação**:
+    *   Vá para a tela `Atribuição de Casos`. Seus casos fictícios (com status "Novo") devem aparecer na lista, prontos para serem atribuídos.
+    *   Use a `Consulta CPF` com um dos CPFs fictícios que você criou para confirmar que os dados foram salvos corretamente.
+
+### 5.3. Credenciais de Teste
+
+Para testes gerais da interface e funcionalidades (excluindo as automações), utilize o seguinte perfil de **Gestor**:
+
+-   **Perfil**: `Gestor`
+-   **Nome Completo**: `Carlos Eduardo Turina`
+-   **CPF**: `43836007860`
+
+## 6. Manutenção, Limitações e Escalabilidade
+
+### 6.1. Gerenciamento de Credenciais Estáticas
 
 A ferramenta utiliza uma combinação de credenciais dinâmicas (inseridas pelo usuário durante o uso, como no login assistido) e credenciais estáticas (configuradas no ambiente de desenvolvimento).
 
@@ -310,7 +411,7 @@ A ferramenta utiliza uma combinação de credenciais dinâmicas (inseridas pelo 
 -   **Quais serviços são afetados**: Proconsumidor, Procon SJC, Procon Campinas, BCB-RDR, API do Procon Uberlândia, API do Trello e API do Google.
 -   **Ação corretiva**: Se uma automação falhar, o primeiro passo é verificar se as credenciais correspondentes no arquivo `.env` ainda são válidas. Tente fazer login manualmente no site do serviço com essas credenciais. Se falharem, atualize o arquivo `.env` com as novas credenciais e reinicie o ExtraHub.
 
-### 5.2. Atualização de URLs e Seletores
+### 6.2. Atualização de URLs e Seletores
 
 As automações dependem da estrutura HTML (URLs, IDs de elementos, classes CSS) dos sites externos. Esses sites podem ser atualizados a qualquer momento, o que pode quebrar as automações.
 
@@ -319,7 +420,7 @@ As automações dependem da estrutura HTML (URLs, IDs de elementos, classes CSS)
     1.  Inspecionar o site que falhou para encontrar o novo URL ou seletor do elemento (ex: campo de login, botão de download).
     2.  Atualizar o código correspondente no arquivo de handler apropriado (em `electron/handlers/`).
 
-### 5.3. Limitações de API e Escalabilidade
+### 6.3. Limitações de API e Escalabilidade
 
 A ferramenta utiliza as APIs do Google Sheets e do Trello, ambas configuradas para usar planos gratuitos. Esses planos têm limites de uso (cotas de requisições por minuto/dia).
 
@@ -327,33 +428,33 @@ A ferramenta utiliza as APIs do Google Sheets e do Trello, ambas configuradas pa
 -   **Causa**: Uso excessivo da aplicação em um curto período, excedendo as cotas do plano gratuito.
 -   **Escalabilidade**: Para um uso mais intensivo ou empresarial, é **altamente recomendado** migrar para planos pagos tanto no projeto do Google Cloud quanto no workspace do Trello. Isso garantirá cotas de API mais altas, maior confiabilidade e melhor desempenho geral da ferramenta.
 
-## 6. Solução de Problemas (Troubleshooting)
+## 7. Solução de Problemas (Troubleshooting)
 
-### 6.1. Erros de Login
+### 7.1. Erros de Login
 
 -   **Sintoma**: Mensagem de erro "Opa, parece que tivemos um erro..."
 -   **Causa 1**: Tipo de perfil (Gestor/Analista) não selecionado ou incorreto.
 -   **Causa 2**: Nome ou CPF digitados incorretamente. O nome deve ser **exatamente** como está na planilha, incluindo maiúsculas e minúsculas.
 -   **Causa 3**: O usuário não existe na aba `Gestores` ou `Analistas` da planilha Google Sheets.
 
-### 6.2. Falhas nas Automações
+### 7.2. Falhas nas Automações
 
 -   **Sintoma**: A automação para no meio do caminho com um erro no modal de log.
--   **Causa 1: Credenciais inválidas**: Veja a seção [5.1. Gerenciamento de Credenciais Estáticas](#51-gerenciamento-de-credenciais-estáticas).
--   **Causa 2: Mudança na interface do site**: Veja a seção [5.2. Atualização de URLs e Seletores](#52-atualização-de-urls-e-seletores).
+-   **Causa 1: Credenciais inválidas**: Veja a seção [6.1. Gerenciamento de Credenciais Estáticas](#61-gerenciamento-de-credenciais-estáticas).
+-   **Causa 2: Mudança na interface do site**: Veja a seção [6.2. Atualização de URLs e Seletores](#62-atualização-de-urls-e-seletores).
 -   **Causa 3: Problemas com o Playwright/Chromium**:
     -   **Solução**: Tente remover a pasta `node_modules` e o arquivo `package-lock.json` e rodar `npm install` novamente para forçar uma reinstalação limpa.
 
-### 6.3. Problemas de Conexão (Google/Trello)
+### 7.3. Problemas de Conexão (Google/Trello)
 
 -   **Sintoma**: A aplicação falha ao iniciar ou ao tentar acessar dados online (ex: tela de login não funciona, consulta de CPF dá erro).
 -   **Causa 1: `GOOGLE_SHEET_ID` incorreto**: Verifique o ID no arquivo `.env`.
 -   **Causa 2: `service_account.json` ausente ou inválido**: Certifique-se de que o arquivo está na pasta `backend` e não está corrompido.
 -   **Causa 3: Conta de serviço sem permissão**: Verifique se o `client_email` da conta de serviço foi compartilhado como **Editor** na planilha.
 -   **Causa 4: Credenciais do Trello inválidas**: Verifique `TRELLO_API_KEY` e `TRELLO_API_TOKEN` no arquivo `.env`.
--   **Causa 5: Limites de API excedidos**: Veja a seção [5.3. Limitações de API e Escalabilidade](#53-limitações-de-api-e-escalabilidade).
+-   **Causa 5: Limites de API excedidos**: Veja a seção [6.3. Limitações de API e Escalabilidade](#63-limitações-de-api-e-escalabilidade).
 
-### 6.4. Depuração Geral
+### 7.4. Depuração Geral
 
 -   **Abra o DevTools**: Em `electron/main_electron.js`, descomente a linha `mainWindow.webContents.openDevTools();`. Isso abrirá o console do Chromium junto com a aplicação, permitindo inspecionar elementos da UI, ver logs do console do frontend e depurar o JavaScript do React.
 -   **Logs de Backend**: Os logs do processo principal (backend) são exibidos diretamente no terminal onde você executou `npm start`. Fique de olho neles para erros de Node.js, Playwright e APIs.
