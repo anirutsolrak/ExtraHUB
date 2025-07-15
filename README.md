@@ -1,5 +1,3 @@
-README.md:
-```markdown
 # ExtraHub - Documentação Técnica
 
 Bem-vindo à documentação do ExtraHub, o Hub de Gestão de Automações e Relatórios. Este documento serve como um guia completo para a instalação, uso, desenvolvimento e solução de problemas da aplicação.
@@ -11,22 +9,10 @@ Bem-vindo à documentação do ExtraHub, o Hub de Gestão de Automações e Rela
   - [2.1. Pré-requisitos](#21-pré-requisitos)
   - [2.2. Passos de Instalação](#22-passos-de-instalação)
   - [2.3. Configuração do Ambiente](#23-configuração-do-ambiente)
-    - [Arquivo `.env`](#arquivo-env)
-    - [Arquivo `service_account.json`](#arquivo-service_accountjson)
-    - [Configuração da Planilha Google Sheets](#configuração-da-planilha-google-sheets)
 - [3. Guia do Usuário](#3-guia-do-usuário)
   - [3.1. Login](#31-login)
   - [3.2. Interface Principal e Acessos](#32-interface-principal-e-acessos)
-    - [Controle de Acesso por Perfil](#controle-de-acesso-por-perfil)
   - [3.3. Funcionalidades por Tela](#33-funcionalidades-por-tela)
-    - [Home](#home)
-    - [Atribuição de Casos](#atribuição-de-casos)
-    - [Gerenciar Acessos](#gerenciar-acessos)
-    - [Automações](#automações)
-    - [Pipeline de Dados](#pipeline-de-dados)
-    - [Consulta CPF](#consulta-cpf)
-    - [Audiências](#audiências)
-    - [Configurações](#configurações)
 - [4. Guia do Desenvolvedor](#4-guia-do-desenvolvedor)
   - [4.1. Estrutura do Projeto](#41-estrutura-do-projeto)
   - [4.2. Fluxo de Comunicação (Frontend <-> Backend)](#42-fluxo-de-comunicação-frontend---backend)
@@ -116,8 +102,7 @@ BCB_RDR_USER=USUARIO_BCB
 BCB_RDR_SENHA=SENHA_BCB
 
 # Token da API do Procon Uberlândia
-PROCON_UBERLANDIA_TOKEN=SEU_TOKEN_DE_AUTORIZACAO
-```
+PROCON_UBERLANDIA_TOKEN=SEU_TOKEN_DE_AUTORIZACAO```
 
 ##### Credenciais de APIs (Google & Trello)
 ```dotenv
@@ -458,4 +443,3 @@ A ferramenta utiliza as APIs do Google Sheets e do Trello, ambas configuradas pa
 
 -   **Abra o DevTools**: Em `electron/main_electron.js`, descomente a linha `mainWindow.webContents.openDevTools();`. Isso abrirá o console do Chromium junto com a aplicação, permitindo inspecionar elementos da UI, ver logs do console do frontend e depurar o JavaScript do React.
 -   **Logs de Backend**: Os logs do processo principal (backend) são exibidos diretamente no terminal onde você executou `npm start`. Fique de olho neles para erros de Node.js, Playwright e APIs.
-```
