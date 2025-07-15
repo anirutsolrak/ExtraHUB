@@ -7,6 +7,58 @@ function AccessManager() {
     const [newAnalystCpf, setNewAnalystCpf] = React.useState('');
     const [selectedBoardIdForAnalyst, setSelectedBoardIdForAnalyst] = React.useState('');
 
+    function AccessManagerSkeleton() {
+        return (
+            <div className="space-y-6 animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-1/2 mb-6"></div>
+                
+                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                    <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+                    <div className="overflow-x-auto">
+                        <div className="w-full">
+                            <div className="flex bg-gray-50 p-2 space-x-4">
+                                <div className="w-1/4 h-5 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-5 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-5 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-5 bg-gray-200 rounded"></div>
+                            </div>
+                            {Array.from({ length: 2 }).map((_, i) => (
+                                <div key={i} className="flex items-center p-4 border-t space-x-4">
+                                    <div className="w-1/4 h-5 bg-gray-300 rounded"></div>
+                                    <div className="w-1/4 flex justify-center"><div className="h-5 w-5 bg-gray-200 rounded-sm"></div></div>
+                                    <div className="w-1/4 flex justify-center"><div className="h-5 w-5 bg-gray-200 rounded-sm"></div></div>
+                                    <div className="w-1/4 flex justify-center"><div className="h-5 w-5 bg-gray-200 rounded-sm"></div></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+    
+                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                    <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-6">
+                        <div className="h-14 bg-gray-200 rounded-lg"></div>
+                        <div className="h-14 bg-gray-200 rounded-lg"></div>
+                        <div className="h-14 bg-gray-200 rounded-lg"></div>
+                        <div className="h-10 bg-gray-300 rounded-lg"></div>
+                    </div>
+                    
+                    <div className="h-5 bg-gray-200 rounded w-1/5 mb-4"></div>
+                    <div className="w-full">
+                        {Array.from({ length: 2 }).map((_, i) => (
+                            <div key={i} className="flex items-center p-4 border-t space-x-4">
+                                <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const fetchData = async () => {
         setIsLoading(true);
         try {
@@ -69,7 +121,7 @@ function AccessManager() {
 
     const getBoardName = (boardId) => data.boards.find(b => b.id === boardId)?.name || 'Desconhecido';
 
-    if (isLoading) return <p>Carregando dados do Workspace...</p>;
+    if (isLoading) return <AccessManagerSkeleton />;
     if (error) return <p className="text-red-500">Erro: {error}</p>;
 
     return (

@@ -1,15 +1,43 @@
 function SearchResultDisplay({ searchData, onClose, isLoading }) {
     if (!searchData && !isLoading) return null;
 
+    function SearchResultSkeleton() {
+        return (
+            <div className="space-y-4 animate-pulse">
+                {Array.from({ length: 2 }).map((_, index) => (
+                    <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div className="h-5 bg-gray-300 rounded w-3/4 mb-4"></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                            <div className="space-y-1">
+                                <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                            </div>
+                            <div className="space-y-1">
+                                <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                            </div>
+                            <div className="space-y-1">
+                                <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                            </div>
+                            <div className="space-y-1">
+                                <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                            </div>
+                            <div className="sm:col-span-2 space-y-1">
+                                <div className="h-3 bg-gray-200 rounded w-1/6"></div>
+                                <div className="h-4 bg-gray-200 rounded w-full"></div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
     const renderContent = () => {
         if (isLoading) {
-            return (
-                <div className="flex flex-col justify-center items-center h-48 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                    <p className="text-gray-600 font-medium">Buscando reclamações...</p>
-                    <p className="text-sm text-gray-400">Isso pode levar alguns segundos.</p>
-                </div>
-            );
+            return <SearchResultSkeleton />;
         }
 
         if (searchData.error) {

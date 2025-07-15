@@ -137,6 +137,12 @@ function registerAuthHandlers(ipcMain, logging, { BrowserWindow, session, getGoo
             throw new Error(`Tipo de perfil desconhecido: ${userType}`);
         }
     }, logging));
+
+    ipcMain.handle('auth:clear-trello-session', () => runTask('Limpar Sessão Trello', async () => {
+        const trelloSession = session.fromPartition('persist:trello_session');
+        await trelloSession.clearStorageData();
+        return { success: true };
+    }, logging));
     
     ipcMain.handle('auth:check-google-status', () => ({ isConnected: !!getGoogleAuthClient() }));
 

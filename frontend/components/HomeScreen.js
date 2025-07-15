@@ -5,6 +5,7 @@ function HomeScreen({ currentUser }) {
     const [allowedBoards, setAllowedBoards] = React.useState([]);
     const [selectedBoardId, setSelectedBoardId] = React.useState('');
     const [isTrelloAuthenticated, setIsTrelloAuthenticated] = React.useState(false);
+    const webviewRef = React.useRef(null);
 
     function TrelloSkeleton() {
         return (
@@ -89,6 +90,35 @@ function HomeScreen({ currentUser }) {
         }
     }, [currentUser]);
 
+    React.useEffect(() => {
+        const webview = webviewRef.current;
+        if (webview && currentUser && currentUser.role === 'gestor') {
+            const handleLoad = () => {
+                webview.executeJavaScript(`
+                    setTimeout(() => {
+                        const clearButton = document.querySelector('a.js-clear-all-filters');
+                        if (clearButton) {
+                            clearButton.click();
+                        } else {
+                            const textButton = Array.from(document.querySelectorAll('a, button')).find(el => el.textContent.trim() === 'Limpar filtros');
+                            if(textButton) {
+                                textButton.click();
+                            }
+                        }
+                    }, 1500);
+                `);
+            };
+            
+            webview.addEventListener('did-finish-load', handleLoad);
+
+            return () => {
+                if (webview) {
+                    webview.removeEventListener('did-finish-load', handleLoad);
+                }
+            };
+        }
+    }, [trelloUrl, currentUser]);
+
     const handleTrelloLoginClick = async () => {
         setIsLoading(true);
         await window.electronAPI.runTask('auth:interactive-trello-login');
@@ -136,6 +166,7 @@ function HomeScreen({ currentUser }) {
             <div className="flex-grow bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                 {trelloUrl ? (
                     <webview
+                        ref={webviewRef}
                         key={trelloUrl}
                         src={trelloUrl}
                         partition="persist:trello_session"

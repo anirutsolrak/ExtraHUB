@@ -5,6 +5,66 @@ function AtribuicaoScreen() {
     const [error, setError] = React.useState(null);
     const [pendingAssignments, setPendingAssignments] = React.useState({});
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [isChangingBoard, setIsChangingBoard] = React.useState(false);
+
+    function TableSkeleton() {
+        return (
+            <div className="animate-pulse">
+                <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left"><div className="h-4 bg-gray-200 rounded w-3/4"></div></th>
+                            <th className="px-4 py-3 text-left"><div className="h-4 bg-gray-200 rounded w-3/4"></div></th>
+                            <th className="px-4 py-3 text-left"><div className="h-4 bg-gray-200 rounded w-3/4"></div></th>
+                            <th className="px-4 py-3 text-left"><div className="h-4 bg-gray-200 rounded w-3/4"></div></th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <tr key={i}>
+                                <td className="px-4 py-4"><div className="h-5 bg-gray-200 rounded"></div></td>
+                                <td className="px-4 py-4"><div className="h-5 bg-gray-200 rounded"></div></td>
+                                <td className="px-4 py-4"><div className="h-9 bg-gray-200 rounded-lg"></div></td>
+                                <td className="px-4 py-4"><div className="h-9 bg-gray-200 rounded-lg"></div></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
+
+    function AtribuicaoSkeleton() {
+        return (
+            <div className="space-y-6 animate-pulse">
+                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="h-7 bg-gray-200 rounded w-1/3 mb-4"></div>
+                    <div className="flex items-center gap-4 mt-2">
+                        <div className="h-5 bg-gray-200 rounded w-32"></div>
+                        <div className="h-9 bg-gray-200 rounded-lg w-64"></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="w-full divide-y divide-gray-200">
+                        <div className="flex items-center space-x-4 p-3 bg-gray-50">
+                            <div className="h-4 bg-gray-300 rounded w-1/4"></div>
+                            <div className="h-4 bg-gray-300 rounded w-1/4"></div>
+                            <div className="h-4 bg-gray-300 rounded w-1/4"></div>
+                            <div className="h-4 bg-gray-300 rounded w-1/4"></div>
+                        </div>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                            <div key={i} className="flex items-center space-x-4 p-4">
+                                <div className="h-5 bg-gray-200 rounded w-1/4"></div>
+                                <div className="h-5 bg-gray-200 rounded w-1/4"></div>
+                                <div className="h-9 bg-gray-200 rounded-lg w-1/4"></div>
+                                <div className="h-9 bg-gray-200 rounded-lg w-1/4"></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     React.useEffect(() => {
         const fetchData = async () => {
@@ -25,15 +85,26 @@ function AtribuicaoScreen() {
         fetchData();
     }, []);
 
-    const handleBoardChange = (e) => {
-        setSelectedBoardId(e.target.value);
-        setPendingAssignments({});
-    };
+    React.useEffect(() => {
+        if (isChangingBoard) {
+            const timer = setTimeout(() => setIsChangingBoard(false), 50);
+            return () => clearTimeout(timer);
+        }
+    }, [isChangingBoard]);
 
+    const handleBoardChange = (e) => {
+        const newBoardId = e.target.value;
+        if (newBoardId !== selectedBoardId) {
+            setIsChangingBoard(true);
+            setPendingAssignments({});
+            setSelectedBoardId(newBoardId);
+        }
+    };
+    
     const handleSelectionChange = (caseId, type, value) => {
         setPendingAssignments(prev => ({ ...prev, [caseId]: { ...prev[caseId], [type]: value } }));
     };
-    
+
     const handleLaunchAssignments = async () => {
         const assignmentsToSubmit = Object.entries(pendingAssignments)
             .filter(([_, assignment]) => assignment.analystName && assignment.managerId)
@@ -57,7 +128,7 @@ function AtribuicaoScreen() {
 
     const filteredAnalysts = data.analysts.filter(a => a.ID_Quadro_Trello === selectedBoardId);
 
-    if (isLoading) return <p className="text-center p-4">Carregando dados...</p>;
+    if (isLoading) return <AtribuicaoSkeleton />;
     if (error) return <p className="text-red-500 text-center p-4">Erro: {error}</p>;
 
     return (
@@ -74,41 +145,43 @@ function AtribuicaoScreen() {
                             </select>
                         </div>
                     </div>
-                    {selectedBoardId && <button onClick={handleLaunchAssignments} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400" disabled={isSubmitting}>Lançar</button>}
+                    {selectedBoardId && <button onClick={handleLaunchAssignments} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400" disabled={isSubmitting || isChangingBoard}>Lançar</button>}
                 </div>
             </div>
             {selectedBoardId && (
                 <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Protocolo</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Consumidor</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Atribuir Analista</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Atribuir Gestor</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {data.cases.map((caseItem) => (
-                                <tr key={caseItem.ID_Reclamacao_Unico} className={pendingAssignments[caseItem.ID_Reclamacao_Unico] ? 'bg-blue-50' : ''}>
-                                    <td className="px-4 py-4 text-sm">{caseItem.ID_Reclamacao_Unico}</td>
-                                    <td className="px-4 py-4 text-sm">{caseItem.Consumidor_Nome}</td>
-                                    <td className="px-4 py-4 text-sm">
-                                        <select value={pendingAssignments[caseItem.ID_Reclamacao_Unico]?.analystName || ''} onChange={(e) => handleSelectionChange(caseItem.ID_Reclamacao_Unico, 'analystName', e.target.value)} className="w-full p-1 border rounded-md">
-                                            <option value="" disabled>Selecione...</option>
-                                            {filteredAnalysts.map(a => <option key={a.Nome_Analista} value={a.Nome_Analista}>{a.Nome_Analista}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="px-4 py-4 text-sm">
-                                         <select value={pendingAssignments[caseItem.ID_Reclamacao_Unico]?.managerId || ''} onChange={(e) => handleSelectionChange(caseItem.ID_Reclamacao_Unico, 'managerId', e.target.value)} className="w-full p-1 border rounded-md">
-                                            <option value="" disabled>Selecione...</option>
-                                            {data.managers.map(m => <option key={m.ID_Trello} value={m.ID_Trello}>{m.Nome_Gestor}</option>)}
-                                        </select>
-                                    </td>
+                    {(isChangingBoard || isSubmitting) ? <TableSkeleton /> : (
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Protocolo</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Consumidor</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Atribuir Analista</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Atribuir Gestor</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {data.cases.map((caseItem) => (
+                                    <tr key={caseItem.ID_Reclamacao_Unico} className={pendingAssignments[caseItem.ID_Reclamacao_Unico] ? 'bg-blue-50' : ''}>
+                                        <td className="px-4 py-4 text-sm">{caseItem.ID_Reclamacao_Unico}</td>
+                                        <td className="px-4 py-4 text-sm">{caseItem.Consumidor_Nome}</td>
+                                        <td className="px-4 py-4 text-sm">
+                                            <select value={pendingAssignments[caseItem.ID_Reclamacao_Unico]?.analystName || ''} onChange={(e) => handleSelectionChange(caseItem.ID_Reclamacao_Unico, 'analystName', e.target.value)} className="w-full p-1 border rounded-md">
+                                                <option value="" disabled>Selecione...</option>
+                                                {filteredAnalysts.map(a => <option key={a.Nome_Analista} value={a.Nome_Analista}>{a.Nome_Analista}</option>)}
+                                            </select>
+                                        </td>
+                                        <td className="px-4 py-4 text-sm">
+                                             <select value={pendingAssignments[caseItem.ID_Reclamacao_Unico]?.managerId || ''} onChange={(e) => handleSelectionChange(caseItem.ID_Reclamacao_Unico, 'managerId', e.target.value)} className="w-full p-1 border rounded-md">
+                                                <option value="" disabled>Selecione...</option>
+                                                {data.managers.map(m => <option key={m.ID_Trello} value={m.ID_Trello}>{m.Nome_Gestor}</option>)}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             )}
         </div>

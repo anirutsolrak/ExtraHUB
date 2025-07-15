@@ -237,7 +237,7 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         const allCases = arraysToObjects(casesResponse.data.values);
         const allAnalysts = arraysToObjects(analystsResponse.data.values);
         const caseMap = new Map(allCases.map((row, index) => [row.ID_Reclamacao_Unico, { ...row, rowIndex: index + 2 }]));
-        const analystLabelMap = new Map(allAnalysts.map(a => [`${a.Nome_Analista}-${taskArgs.boardId}`, a.ID_Etiqueta_Trello]));
+        const analystLabelMap = new Map(allAnalysts.map(a => [`${a.Nome_Analista}-${a.ID_Quadro_Trello}`, a.ID_Etiqueta_Trello]));
         let createdCardsCount = 0;
         const updatesForSheet = [];
 

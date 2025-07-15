@@ -1,13 +1,32 @@
 function AudienciasDisplay({ results, isLoading, onSearch }) {
+    function AudienciasSkeleton() {
+        return (
+            <div className="overflow-x-auto animate-pulse">
+                <div className="min-w-full divide-y divide-gray-200">
+                    <div className="bg-gray-50 flex py-3 px-6 space-x-4">
+                        <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                        <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                        <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                        <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="bg-white divide-y divide-gray-200">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="flex py-4 px-6 space-x-4">
+                                <div className="w-1/4 h-4 bg-gray-300 rounded"></div>
+                                <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                                <div className="w-1/4 h-4 bg-gray-200 rounded"></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const renderContent = () => {
         if (isLoading) {
-            return (
-                <div className="flex flex-col justify-center items-center h-48 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                    <p className="text-gray-600 font-medium">Buscando audiências...</p>
-                    <p className="text-sm text-gray-400">Isso pode levar alguns segundos.</p>
-                </div>
-            );
+            return <AudienciasSkeleton />;
         }
 
         if (!results) {
