@@ -7,6 +7,41 @@ function AtribuicaoScreen() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isChangingBoard, setIsChangingBoard] = React.useState(false);
 
+    const filteredCases = React.useMemo(() => {
+        if (!selectedBoardId || !data.boards.length) {
+            return [];
+        }
+
+        const selectedBoard = data.boards.find(b => b.id === selectedBoardId);
+        if (!selectedBoard) {
+            return [];
+        }
+
+        const boardNameToPrefix = (boardName) => {
+            const lowerBoardName = boardName.toLowerCase();
+            if (lowerBoardName.includes('bacen') || lowerBoardName.includes('bcb')) return 'BCB_RDR';
+            if (lowerBoardName.includes('consumidor.gov')) return 'Gov';
+            if (lowerBoardName.includes('procon-sp')) return 'SP';
+            if (lowerBoardName.includes('sjc')) return 'SJC';
+            if (lowerBoardName.includes('campinas')) return 'Campinas';
+            if (lowerBoardName.includes('uberlandia')) return 'Uberlandia';
+            if (lowerBoardName.includes('proconsumidor')) return 'Proconsumidor';
+            if (lowerBoardName.includes('hugme')) return 'HugMe';
+            return null;
+        };
+
+        const prefix = boardNameToPrefix(selectedBoard.name);
+
+        if (prefix) {
+            return data.cases.filter(caseItem => 
+                caseItem.ID_Reclamacao_Unico && caseItem.ID_Reclamacao_Unico.startsWith(prefix)
+            );
+        }
+        
+        return [];
+
+    }, [selectedBoardId, data.cases, data.boards]);
+
     function TableSkeleton() {
         return (
             <div className="animate-pulse">
@@ -161,7 +196,7 @@ function AtribuicaoScreen() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {data.cases.map((caseItem) => (
+                                {filteredCases.map((caseItem) => (
                                     <tr key={caseItem.ID_Reclamacao_Unico} className={pendingAssignments[caseItem.ID_Reclamacao_Unico] ? 'bg-blue-50' : ''}>
                                         <td className="px-4 py-4 text-sm">{caseItem.ID_Reclamacao_Unico}</td>
                                         <td className="px-4 py-4 text-sm">{caseItem.Consumidor_Nome}</td>
