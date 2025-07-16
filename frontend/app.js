@@ -34,9 +34,15 @@ function App() {
         }
     };
 
-    const handleLogout = () => {
-        setCurrentUser(null);
-        setActiveTab('home');
+    const handleLogout = async () => {
+        try {
+            await window.electronAPI.runTask('auth:clear-trello-session');
+        } catch (error) {
+            console.error("Falha ao limpar a sessão do Trello no logout:", error);
+        } finally {
+            setCurrentUser(null);
+            setActiveTab('home');
+        }
     };
     
     const handleSelectFolder = async () => {
@@ -115,10 +121,10 @@ function App() {
     ];
 
     const pipelineConfig = [
-        { id: 1, name: "Consolidar Relatórios Locais", ipcName: 'pipeline:consolidate-all', description: "Consolida todos os relatórios baixados em arquivos únicos por fonte. PRÉ-REQUISITO para as próximas etapas." },
+        { id: 1, name: "Consolidar Relatórios Locais", ipcName: 'pipeline:consolidate-all', description: "Junta todos os relatórios baixados em arquivos únicos por fonte. Esta é a primeira etapa obrigatória." },
         { id: 2, name: "Criar Base Bruta Local", ipcName: 'pipeline:create-raw-base', description: "Combina os arquivos consolidados em um único arquivo Excel (Base_Mae_Bruta.xlsx), com uma aba por fonte de dados." },
-        { id: 3, name: "Gerar Base Mãe Final Local", ipcName: 'pipeline:generate-master-base', description: "Processa a Base Bruta local, padroniza os dados e gera a 'Base_Mae_Final.xlsx' localmente." },
-        { id: 4, name: "Upload Base Mãe para Google Sheets", ipcName: 'pipeline:upload-master-base-to-sheets', description: "Envia os novos registros da Base Mãe Final local para a planilha no Google Sheets." }
+        { id: 3, name: "Gerar Base Mãe Final Local", ipcName: 'pipeline:generate-master-base', description: "Processa a Base Bruta, padroniza as colunas e os dados, e gera a 'Base_Mae_Final.xlsx' localmente." },
+        { id: 4, name: "Upload para Google Sheets", ipcName: 'pipeline:upload-master-base-to-sheets', description: "Envia somente os novos registros da Base Mãe Final local para a planilha online no Google Sheets." }
     ];
     
     const groupedAutomations = automationsConfig.reduce((acc, auto) => {
@@ -149,20 +155,23 @@ function App() {
             case 'pipeline':
                 return (
                     <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Pipeline de Dados</h3>
-                        <p className="text-sm text-gray-600 mb-6">Execute as etapas para gerar a base de dados final.</p>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">Processamento de Dados</h2>
+                        <p className="text-md text-gray-600 mb-8">Execute as etapas abaixo <span className="font-bold">na ordem correta</span> para consolidar, padronizar e enviar os dados para a nuvem. Cada etapa depende da conclusão da anterior.</p>
                         <div className="space-y-4">
                             {pipelineConfig.map(step => (
                                 <button
                                     key={step.id}
                                     onClick={() => handleRunPipelineStep(step.name, step.ipcName)}
-                                    className="w-full text-left p-4 rounded-lg bg-gray-50 hover:bg-gray-100 border flex justify-between items-center"
+                                    className="w-full text-left p-4 rounded-lg bg-white hover:bg-gray-50 border border-gray-200 flex items-center space-x-4 transition-colors"
                                 >
-                                    <div>
-                                        <p className="font-semibold">{step.name}</p>
-                                        <p className="text-xs text-gray-500">{step.description}</p>
+                                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg">
+                                        {step.id}
                                     </div>
-                                    <div className="icon-play text-blue-600"></div>
+                                    <div className="flex-grow">
+                                        <p className="font-semibold text-gray-800 text-base">{step.name}</p>
+                                        <p className="text-sm text-gray-500">{step.description}</p>
+                                    </div>
+                                    <div className="icon-play text-blue-600 text-2xl mr-2"></div>
                                 </button>
                             ))}
                         </div>
@@ -184,7 +193,7 @@ function App() {
         { id: 'atribuicao', label: 'Atribuição de Casos', icon: 'user-plus' },
         { id: 'access-management', label: 'Gerenciar Acessos', icon: 'shield-check' },
         { id: 'automations', label: 'Automações', icon: 'zap' },
-        { id: 'pipeline', label: 'Pipeline de Dados', icon: 'server' },
+        { id: 'pipeline', label: 'Processamento de Dados', icon: 'server' },
         { id: 'consult', label: 'Consulta CPF', icon: 'search' },
         { id: 'audiencias', label: 'Audiências', icon: 'briefcase' },
         { id: 'settings', label: 'Configurações', icon: 'settings' }

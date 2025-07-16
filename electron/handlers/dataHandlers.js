@@ -94,7 +94,6 @@ const fetchTrelloAPI = async (endpoint, method = 'GET', body = null, logging) =>
     }
 
     const fullUrl = urlWithAuth.toString();
-    console.log(`[DEBUG] Construindo URL da API Trello: ${fullUrl}`);
     
     const options = { method, headers: { 'Accept': 'application/json' } };
     const response = await fetch(fullUrl, options);
@@ -228,16 +227,21 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         const allListsOnBoard = await fetchTrelloAPI(`boards/${taskArgs.boardId}/lists`, 'GET', null, currentLogging);
         const targetList = allListsOnBoard.find(l => l.name.toLowerCase() === 'entrantes');
         if (!targetList) throw new Error(`Não foi encontrada uma lista chamada "Entrantes" no quadro selecionado.`);
+        
+        const allLabelsOnBoard = await fetchTrelloAPI(`boards/${taskArgs.boardId}/labels`, 'GET', null, currentLogging);
+        
         const trelloListId = targetList.id;
         const sheets = getSheetsService();
         const [casesResponse, analystsResponse] = await Promise.all([
             sheets.spreadsheets.values.get({ spreadsheetId, range: 'Base_Mae_Final!A:W' }),
             sheets.spreadsheets.values.get({ spreadsheetId, range: 'Analistas!A:D' })
         ]);
+        
         const allCases = arraysToObjects(casesResponse.data.values);
         const allAnalysts = arraysToObjects(analystsResponse.data.values);
         const caseMap = new Map(allCases.map((row, index) => [row.ID_Reclamacao_Unico, { ...row, rowIndex: index + 2 }]));
         const analystLabelMap = new Map(allAnalysts.map(a => [`${a.Nome_Analista}-${a.ID_Quadro_Trello}`, a.ID_Etiqueta_Trello]));
+        
         let createdCardsCount = 0;
         const updatesForSheet = [];
 
@@ -247,17 +251,41 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             const caseData = caseMap.get(caseId);
             if (!caseData) { currentLogging.log(`AVISO: Não foi possível encontrar dados para o ID: ${caseId}`); continue; }
 
-            const cardTitle = `${caseData.OPERADOR || 'N/A'} | ${caseData.Consumidor_Nome || 'N/A'} - ${caseData.Consumidor_CPF || 'N/A'} | [${caseData.ID_Reclamacao_Unico || 'N/A'}]`;
-            let cardDesc = `**Descrição:**\n${caseData.Descricao_Reclamacao || 'N/A'}\n\n...`;
+            const cardTitle = `${analystName || 'N/A'} | ${caseData.Consumidor_Nome || 'N/A'} - ${caseData.Consumidor_CPF || 'N/A'} | [${caseData.Protocolo_Origem || 'N/A'}]`;
+            
+            let cardDesc = `**Solicitação:**\nCÓPIA DE CONTRATO\n\n`;
+            cardDesc += `**Contrato(s):** N/A\n`;
+            cardDesc += `**Telefone:** ${caseData.Consumidor_Celular || 'N/A'}\n`;
+            cardDesc += `**Empresa:** ${caseData.Fornecedor_Empresa || 'N/A'}\n`;
+            cardDesc += `**Link Original:** N/A`;
+
             try {
                 const newCard = await fetchTrelloAPI(`cards`, 'POST', { name: cardTitle, desc: cardDesc, idList: trelloListId, idMembers: [managerId] }, currentLogging);
+                
+                const labelsToApply = [];
                 const analystLabelId = analystLabelMap.get(`${analystName}-${taskArgs.boardId}`);
                 if (analystLabelId) {
-                    await fetchTrelloAPI(`cards/${newCard.id}/idLabels`, 'POST', { value: analystLabelId }, currentLogging);
+                    labelsToApply.push(analystLabelId);
                 }
+
+                if (caseData.Fornecedor_Empresa) {
+                    let companyLabel = allLabelsOnBoard.find(l => l.name.toLowerCase() === caseData.Fornecedor_Empresa.toLowerCase());
+                    if (!companyLabel) {
+                        currentLogging.log(`Criando nova etiqueta para a empresa: ${caseData.Fornecedor_Empresa}`);
+                        companyLabel = await fetchTrelloAPI('labels', 'POST', { name: caseData.Fornecedor_Empresa, color: 'orange', idBoard: taskArgs.boardId }, currentLogging);
+                        allLabelsOnBoard.push(companyLabel);
+                    }
+                    labelsToApply.push(companyLabel.id);
+                }
+
+                for (const labelId of labelsToApply) {
+                    await fetchTrelloAPI(`cards/${newCard.id}/idLabels`, 'POST', { value: labelId }, currentLogging);
+                }
+                
                 updatesForSheet.push(
-                    { range: `Base_Mae_Final!V${caseData.rowIndex}`, values: [['Processado']] },
+                    { range: `Base_Mae_Final!T${caseData.rowIndex}`, values: [[analystName]] },
                     { range: `Base_Mae_Final!U${caseData.rowIndex}`, values: [[analystName]] },
+                    { range: `Base_Mae_Final!V${caseData.rowIndex}`, values: [['Processado']] },
                     { range: `Base_Mae_Final!W${caseData.rowIndex}`, values: [[newCard.id]] }
                 );
                 createdCardsCount++;
@@ -534,7 +562,7 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         }
 
         currentLogging.log("Unificando e finalizando a Base Mãe...");
-        const FINAL_COLUMNS_ORDER_LOCAL = [ 'ID_Reclamacao_Unico', 'Protocolo_Origem', 'Fonte_Dados', 'Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta', 'Canal_Origem', 'Consumidor_Nome', 'Consumidor_CPF', 'Consumidor_Cidade', 'Consumidor_UF', 'Consumidor_Email', 'Consumidor_Celular', 'Consumidor_Faixa_Etaria', 'Consumidor_Genero', 'Fornecedor_Empresa', 'Descricao_Reclamacao', 'Status_Atual', 'Resultado_Final' ]; 
+        const FINAL_COLUMNS_ORDER_LOCAL = [ 'ID_Reclamacao_Unico', 'Protocolo_Origem', 'Fonte_Dados', 'Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta', 'Canal_Origem', 'Consumidor_Nome', 'Consumidor_CPF', 'Consumidor_Cidade', 'Consumidor_UF', 'Consumidor_Email', 'Consumidor_Celular', 'Consumidor_Faixa_Etaria', 'Consumidor_Genero', 'Fornecedor_Empresa', 'Descricao_Reclamacao', 'Status_Atual', 'Resultado_Final', 'OPERADOR' ]; 
 
         const finalData = allData.map(row => {
             const finalRow = {};
