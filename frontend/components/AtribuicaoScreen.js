@@ -9,12 +9,12 @@ function AtribuicaoScreen() {
 
     const filteredCases = React.useMemo(() => {
         if (!selectedBoardId || !data.boards.length) {
-            return [];
+            return data.cases;
         }
 
         const selectedBoard = data.boards.find(b => b.id === selectedBoardId);
         if (!selectedBoard) {
-            return [];
+            return data.cases;
         }
 
         const boardNameToPrefix = (boardName) => {
@@ -38,7 +38,7 @@ function AtribuicaoScreen() {
             );
         }
         
-        return [];
+        return data.cases;
 
     }, [selectedBoardId, data.cases, data.boards]);
 
@@ -100,23 +100,24 @@ function AtribuicaoScreen() {
             </div>
         );
     }
+    
+    const fetchData = async () => {
+        setIsLoading(true);
+        setError('');
+        try {
+            const [assignData, boardsData] = await Promise.all([
+                window.electronAPI.runTask('data:getAssignableData'),
+                window.electronAPI.runTask('trello:get-boards')
+            ]);
+            setData({ ...assignData, boards: boardsData || [] });
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     React.useEffect(() => {
-        const fetchData = async () => {
-            setIsLoading(true);
-            setError('');
-            try {
-                const [assignData, boardsData] = await Promise.all([
-                    window.electronAPI.runTask('data:getAssignableData'),
-                    window.electronAPI.runTask('trello:get-boards')
-                ]);
-                setData({ ...assignData, boards: boardsData || [] });
-            } catch (err) {
-                setError(err.message);
-            } finally {
-                setIsLoading(false);
-            }
-        };
         fetchData();
     }, []);
 
@@ -154,6 +155,7 @@ function AtribuicaoScreen() {
             alert(response.message);
             setPendingAssignments({});
             setSelectedBoardId('');
+            await fetchData();
         } catch (err) {
             alert(`Erro ao submeter: ${err.message}`);
         } finally {

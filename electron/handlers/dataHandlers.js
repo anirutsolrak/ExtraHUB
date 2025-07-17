@@ -259,8 +259,27 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             cardDesc += `**Empresa:** ${caseData.Fornecedor_Empresa || 'N/A'}\n`;
             cardDesc += `**Link Original:** N/A`;
 
+            const cardPayload = {
+                name: cardTitle,
+                desc: cardDesc,
+                idList: trelloListId,
+                idMembers: [managerId]
+            };
+            
+            const dueDate = caseData.Prazo_Resposta ? parseDate(caseData.Prazo_Resposta) : null;
+            if (dueDate && !isNaN(dueDate.getTime())) {
+                dueDate.setUTCHours(12);
+                cardPayload.due = dueDate.toISOString();
+            }
+
+            const startDate = caseData.Data_Abertura ? parseDate(caseData.Data_Abertura) : null;
+            if (startDate && !isNaN(startDate.getTime())) {
+                startDate.setUTCHours(12);
+                cardPayload.start = startDate.toISOString();
+            }
+
             try {
-                const newCard = await fetchTrelloAPI(`cards`, 'POST', { name: cardTitle, desc: cardDesc, idList: trelloListId, idMembers: [managerId] }, currentLogging);
+                const newCard = await fetchTrelloAPI(`cards`, 'POST', cardPayload, currentLogging);
                 
                 const labelsToApply = [];
                 const analystLabelId = analystLabelMap.get(`${analystName}-${taskArgs.boardId}`);
