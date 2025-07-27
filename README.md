@@ -114,34 +114,9 @@ TRELLO_API_KEY=SUA_CHAVE_DE_API_TRELLO
 TRELLO_API_TOKEN=SEU_TOKEN_DE_API_TRELLO
 ```
 
-##### Variáveis Obsoletas (Não utilizadas)
-As seguintes variáveis são de versões antigas e não são mais utilizadas pela aplicação. Podem ser removidas do seu arquivo `.env`.
-```dotenv
-# PROXY_SERVER=
-# CONSUMIDOR_GOV_CPF=
-# CONSUMIDOR_GOV_SENHA=
-# PROCON_MT_USER=
-# PROCON_MT_SENHA=
-# TRELLO_API_SECRET=
-# TRELLO_BOARD_ID=
-# LIST_ID_ENTRANTES=
-# TRELLO_LOGIN_EMAIL=
-# TRELLO_LOGIN_PASSWORD=
-```
-
 #### Arquivo `service_account.json`
 
-A autenticação com o Google Sheets é feita via uma Conta de Serviço para não depender de login de usuário.
-
-1.  Acesse o [Google Cloud Console](https://console.cloud.google.com/).
-2.  Crie ou selecione um projeto.
-3.  Vá para "APIs e Serviços" > "Credenciais".
-4.  Clique em "Criar Credenciais" > "Conta de Serviço".
-5.  Dê um nome à conta, atribua o papel de "Editor" e conclua.
-6.  Na lista de contas de serviço, clique na que você criou.
-7.  Vá para a aba "Chaves", clique em "Adicionar Chave" > "Criar nova chave".
-8.  Selecione o formato **JSON** e clique em "Criar". Um arquivo `.json` será baixado.
-9.  Renomeie este arquivo para `service_account.json` e coloque-o na pasta `backend`.
+A autenticação com o Google Sheets é feita via uma Conta de Serviço. Siga o guia `SETUP_GOOGLE_API.md` para criar sua conta de serviço, gerar o arquivo JSON, renomeá-lo para `service_account.json` e colocá-lo na pasta `backend`.
 
 #### Configuração da Planilha Google Sheets
 
@@ -149,11 +124,64 @@ A autenticação com o Google Sheets é feita via uma Conta de Serviço para nã
 2.  Abra sua planilha no Google Sheets.
 3.  Clique em "Compartilhar".
 4.  Cole o `client_email` no campo de compartilhamento e dê permissão de **Editor**.
-5.  Certifique-se de que sua planilha possui as seguintes abas (com os nomes exatos):
-    - `Base_Mae_Final`
-    - `Gestores`
-    - `Analistas`
-    - `Acessos_Quadros`
+5.  Certifique-se de que sua planilha possui as seguintes **4 abas** com os nomes e colunas **exatas**, conforme exigido pelo código-fonte:
+
+    ##### Aba 1: `Gestores`
+    Controla o login de gestores e suas informações do Trello.
+    
+    | Coluna | Cabeçalho Exato   | Descrição                                  |
+    | :----- | :---------------- | :----------------------------------------- |
+    | A      | `Nome_Gestor`     | Nome completo do gestor para login.        |
+    | B      | `CPF_Gestor`      | CPF do gestor (apenas números) para login. |
+    | C      | `ID_Trello`       | ID de membro do Trello do gestor.          |
+    | D      | `Username_Trello` | Username Trello do gestor (ex: `fulano1`). |
+    
+    ##### Aba 2: `Analistas`
+    Controla o login de analistas e suas associações com o Trello.
+    
+    | Coluna | Cabeçalho Exato      | Descrição                                                  |
+    | :----- | :------------------- | :--------------------------------------------------------- |
+    | A      | `Nome_Analista`      | Nome completo do analista para login.                      |
+    | B      | `CPF_Analista`       | CPF do analista (apenas números) para login.               |
+    | C      | `ID_Etiqueta_Trello` | ID da etiqueta (label) do Trello com o nome do analista.   |
+    | D      | `ID_Quadro_Trello`   | ID do quadro Trello ao qual o analista está vinculado.     |
+    
+    ##### Aba 3: `Acessos_Quadros`
+    Define a permissão de acesso de cada gestor aos quadros. É uma lista simples de regras.
+    
+    | Coluna | Cabeçalho Exato    | Descrição                                                     |
+    | :----- | :----------------- | :------------------------------------------------------------ |
+    | A      | `ID_Gestor_Trello` | ID de membro do Trello do gestor (da aba `Gestores`).         |
+    | B      | `ID_Quadro_Trello` | ID do quadro Trello que o gestor pode acessar.                |
+    
+    ##### Aba 4: `Base_Mae_Final`
+    O banco de dados central com todos os casos. A aplicação gerencia 23 colunas.
+    
+    | Coluna | Cabeçalho Exato          |
+    | :----- | :----------------------- |
+    | A      | `ID_Reclamacao_Unico`    |
+    | B      | `Protocolo_Origem`       |
+    | C      | `Fonte_Dados`            |
+    | D      | `Data_Abertura`          |
+    | E      | `Data_Finalizacao`       |
+    | F      | `Prazo_Resposta`         |
+    | G      | `Canal_Origem`           |
+    | H      | `Consumidor_Nome`        |
+    | I      | `Consumidor_CPF`         |
+    | J      | `Consumidor_Cidade`      |
+    | K      | `Consumidor_UF`          |
+    | L      | `Consumidor_Email`       |
+    | M      | `Consumidor_Celular`     |
+    | N      | `Consumidor_Faixa_Etaria`|
+    | O      | `Consumidor_Genero`      |
+    | P      | `Fornecedor_Empresa`     |
+    | Q      | `Descricao_Reclamacao`   |
+    | R      | `Status_Atual`           |
+    | S      | `Resultado_Final`        |
+    | T      | `OPERADOR`               |
+    | U      | `RESPONSAVEL_TRELLO`     |
+    | V      | `STATUS`                 |
+    | W      | `ID_Card_Trello`         |
 
 ## 3. Guia do Usuário
 
@@ -314,7 +342,7 @@ A interface será renderizada automaticamente com o novo card, e o fluxo de comu
 Para criar um ambiente de desenvolvimento ou teste totalmente isolado, você pode alterar os seguintes pontos de conexão:
 
 -   **Mudar a Planilha Google Sheets**:
-    1.  Crie uma nova planilha no Google Sheets com uma cópia das abas (`Base_Mae_Final`, `Gestores`, `Analistas`, `Acessos_Quadros`).
+    1.  Crie uma nova planilha no Google Sheets com as abas (`Base_Mae_Final`, `Gestores`, `Analistas`, `Acessos_Quadros`). **Certifique-se de que a nova planilha siga a estrutura exata de colunas detalhada na seção 2.3.**
     2.  Compartilhe esta nova planilha com o `client_email` da sua `service_account.json`, dando permissão de **Editor**.
     3.  Copie o ID da nova planilha (da URL, por exemplo: `.../spreadsheets/d/ID_DA_PLANILHA/edit`).
     4.  Cole este novo ID na variável `GOOGLE_SHEET_ID` do seu arquivo `.env`.
