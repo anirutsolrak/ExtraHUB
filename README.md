@@ -5,32 +5,33 @@ Bem-vindo à documentação do ExtraHub, o Hub de Gestão de Automações e Rela
 ## Índice
 
 - [1. Introdução](#1-introdução)
-- [2. Instalação e Configuração](#2-instalação-e-configuração)
-  - [2.1. Pré-requisitos](#21-pré-requisitos)
-  - [2.2. Passos de Instalação](#22-passos-de-instalação)
-  - [2.3. Configuração do Ambiente](#23-configuração-do-ambiente)
-- [3. Guia do Usuário](#3-guia-do-usuário)
-  - [3.1. Login](#31-login)
-  - [3.2. Interface Principal e Acessos](#32-interface-principal-e-acessos)
-  - [3.3. Funcionalidades por Tela](#33-funcionalidades-por-tela)
-- [4. Guia do Desenvolvedor](#4-guia-do-desenvolvedor)
-  - [4.1. Estrutura do Projeto](#41-estrutura-do-projeto)
-  - [4.2. Fluxo de Comunicação (Frontend <-> Backend)](#42-fluxo-de-comunicação-frontend---backend)
-  - [4.3. Adicionando uma Nova Automação](#43-adicionando-uma-nova-automação)
-  - [4.4. Configurações Avançadas de Desenvolvimento](#44-configurações-avançadas-de-desenvolvimento)
-- [5. Guia de Testes para Desenvolvedores](#5-guia-de-testes-para-desenvolvedores)
-  - [5.1. Aviso Importante sobre Testes](#51-aviso-importante-sobre-testes)
-  - [5.2. Fluxo de Teste Seguro (Simulando o Pipeline)](#52-fluxo-de-teste-seguro-simulando-o-pipeline)
-  - [5.3. Credenciais de Teste](#53-credenciais-de-teste)
-- [6. Manutenção, Limitações e Escalabilidade](#6-manutenção-limitações-e-escalabilidade)
-  - [6.1. Gerenciamento de Credenciais Estáticas](#61-gerenciamento-de-credenciais-estáticas)
-  - [6.2. Atualização de URLs e Seletores](#62-atualização-de-urls-e-seletores)
-  - [6.3. Limitações de API e Escalabilidade](#63-limitações-de-api-e-escalabilidade)
-- [7. Solução de Problemas (Troubleshooting)](#7-solução-de-problemas-troubleshooting)
-  - [7.1. Erros de Login](#71-erros-de-login)
-  - [7.2. Falhas nas Automações](#72-falhas-nas-automações)
-  - [7.3. Problemas de Conexão (Google/Trello)](#73-problemas-de-conexão-googletrello)
-  - [7.4. Depuração Geral](#74-depuração-geral)
+- [2. Demonstração do Projeto](#2-demonstração-do-projeto)
+- [3. Instalação e Configuração](#3-instalação-e-configuração)
+  - [3.1. Pré-requisitos](#31-pré-requisitos)
+  - [3.2. Passos de Instalação](#32-passos-de-instalação)
+  - [3.3. Configuração do Ambiente](#33-configuração-do-ambiente)
+- [4. Guia do Usuário](#4-guia-do-usuário)
+  - [4.1. Login](#41-login)
+  - [4.2. Interface Principal e Acessos](#42-interface-principal-e-acessos)
+  - [4.3. Funcionalidades por Tela](#43-funcionalidades-por-tela)
+- [5. Guia do Desenvolvedor](#5-guia-do-desenvolvedor)
+  - [5.1. Estrutura do Projeto](#51-estrutura-do-projeto)
+  - [5.2. Fluxo de Comunicação (Frontend <-> Backend)](#52-fluxo-de-comunicação-frontend---backend)
+  - [5.3. Adicionando uma Nova Automação](#53-adicionando-uma-nova-automação)
+  - [5.4. Configurações Avançadas de Desenvolvimento](#54-configurações-avançadas-de-desenvolvimento)
+- [6. Guia de Testes para Desenvolvedores](#6-guia-de-testes-para-desenvolvedores)
+  - [6.1. Aviso Importante sobre Testes](#61-aviso-importante-sobre-testes)
+  - [6.2. Fluxo de Teste Seguro (Simulando o Pipeline)](#62-fluxo-de-teste-seguro-simulando-o-pipeline)
+  - [6.3. Credenciais de Teste](#63-credenciais-de-teste)
+- [7. Manutenção, Limitações e Escalabilidade](#7-manutenção-limitações-e-escalabilidade)
+  - [7.1. Gerenciamento de Credenciais Estáticas](#71-gerenciamento-de-credenciais-estáticas)
+  - [7.2. Atualização de URLs e Seletores](#72-atualização-de-urls-e-seletores)
+  - [7.3. Limitações de API e Escalabilidade](#73-limitações-de-api-e-escalabilidade)
+- [8. Solução de Problemas (Troubleshooting)](#8-solução-de-problemas-troubleshooting)
+  - [8.1. Erros de Login](#81-erros-de-login)
+  - [8.2. Falhas nas Automações](#82-falhas-nas-automações)
+  - [8.3. Problemas de Conexão (Google/Trello)](#83-problemas-de-conexão-googletrello)
+  - [8.4. Depuração Geral](#84-depuração-geral)
 
 ---
 
@@ -43,14 +44,21 @@ O ExtraHub é uma aplicação desktop construída com Electron, React e Node.js,
 - **Gerenciamento de Acessos**: Controla as permissões de gestores e analistas diretamente pela interface.
 - **Consultas Rápidas**: Oferece ferramentas para buscar informações diretamente na base de dados online.
 
-## 2. Instalação e Configuração
+## 2. Demonstração do Projeto
 
-### 2.1. Pré-requisitos
+[![Assista à demonstração no YouTube](https://img.youtube.com/vi/aHZVs912BeM/0.jpg)](https://youtu.be/aHZVs912BeM)
+
+📌 **Dica:** Para uma melhor qualidade de imagem e som, você também pode assistir ao vídeo diretamente no Instagram:
+👉 [https://www.instagram.com/reel/DMpymSfscBH](https://www.instagram.com/reel/DMpymSfscBH/?utm_source=ig_web_copy_link&igsh=MW54eGZhMW54bXZ1Yg==)
+
+## 3. Instalação e Configuração
+
+### 3.1. Pré-requisitos
 
 - **Node.js**: Versão 18.x ou superior.
 - **NPM**: Geralmente instalado junto com o Node.js.
 
-### 2.2. Passos de Instalação
+### 3.2. Passos de Instalação
 
 1.  **Clone o repositório**:
     ```bash
@@ -75,7 +83,7 @@ O ExtraHub é uma aplicação desktop construída com Electron, React e Node.js,
     npm run pack
     ```
 
-### 2.3. Configuração do Ambiente
+### 3.3. Configuração do Ambiente
 
 A configuração correta dos arquivos de ambiente é **crítica** para o funcionamento da aplicação.
 
@@ -84,6 +92,11 @@ A configuração correta dos arquivos de ambiente é **crítica** para o funcion
 Na pasta `backend`, crie um arquivo chamado `.env` e preencha as seguintes variáveis com as credenciais apropriadas.
 
 ##### Credenciais de Automação
+
+> **Aviso Importante:** As credenciais a seguir são exclusivas para a empresa para a qual o projeto foi desenvolvido, pois são geradas por órgãos governamentais em nome da empresa. Sem elas, as rotinas de automação de download não funcionarão.
+>
+> É perfeitamente possível testar as demais funcionalidades da aplicação sem executar as automações. Para isso, consulte a seção **[6.2. Fluxo de Teste Seguro (Simulando o Pipeline)](#62-fluxo-de-teste-seguro-simulando-o-pipeline)**.
+
 ```dotenv
 # Credenciais do Proconsumidor (usado para login automatizado)
 CPF=SEU_CPF_DE_LOGIN
@@ -102,7 +115,8 @@ BCB_RDR_USER=USUARIO_BCB
 BCB_RDR_SENHA=SENHA_BCB
 
 # Token da API do Procon Uberlândia
-PROCON_UBERLANDIA_TOKEN=SEU_TOKEN_DE_AUTORIZACAO```
+PROCON_UBERLANDIA_TOKEN=SEU_TOKEN_DE_AUTORIZACAO
+```
 
 ##### Credenciais de APIs (Google & Trello)
 ```dotenv
@@ -183,9 +197,9 @@ A autenticação com o Google Sheets é feita via uma Conta de Serviço. Siga o 
     | V      | `STATUS`                 |
     | W      | `ID_Card_Trello`         |
 
-## 3. Guia do Usuário
+## 4. Guia do Usuário
 
-### 3.1. Login
+### 4.1. Login
 
 A tela de login permite o acesso de dois tipos de perfis:
 
@@ -199,7 +213,7 @@ Para fazer login, o usuário deve:
 
 As credenciais são validadas contra as abas `Gestores` e `Analistas` da planilha Google Sheets.
 
-### 3.2. Interface Principal e Acessos
+### 4.2. Interface Principal e Acessos
 
 A interface é dividida em duas áreas: uma **barra lateral (Sidebar)** à esquerda para navegação e uma **área de conteúdo principal** à direita. O avatar e o nome do usuário logado são exibidos na parte inferior da barra lateral, junto com o botão de logout.
 
@@ -210,7 +224,7 @@ O menu lateral é adaptado de acordo com o perfil do usuário:
 -   **Gestor**: Possui **acesso total**. Todos os itens do menu são visíveis: `Home`, `Atribuição de Casos`, `Gerenciar Acessos`, `Automações`, `Pipeline de Dados`, `Consulta CPF`, `Audiências` e `Configurações`.
 -   **Analista**: Possui **acesso restrito** às ferramentas de sua rotina. Os itens visíveis são: `Home`, `Consulta CPF` e `Configurações`.
 
-### 3.3. Funcionalidades por Tela
+### 4.3. Funcionalidades por Tela
 
 #### Home
 
@@ -266,9 +280,9 @@ Busca e exibe todos os casos na `Base_Mae_Final` do Google Sheets cujo status co
 -   **Pasta Principal**: Permite selecionar a pasta de trabalho onde todos os relatórios e bases de dados serão salvos. **Esta configuração é obrigatória.**
 -   **Conexão com Google**: Exibe o status da conexão com a API do Google, que é estabelecida na inicialização.
 
-## 4. Guia do Desenvolvedor
+## 5. Guia do Desenvolvedor
 
-### 4.1. Estrutura do Projeto
+### 5.1. Estrutura do Projeto
 
 ```
 extrahub/
@@ -292,7 +306,7 @@ extrahub/
 └── preload.js                # Script que expõe APIs do Node/Electron para o frontend de forma segura
 ```
 
-### 4.2. Fluxo de Comunicação (Frontend <-> Backend)
+### 5.2. Fluxo de Comunicação (Frontend <-> Backend)
 
 A comunicação entre a interface (React) e o backend (Node.js) é feita através do sistema de IPC (Inter-Process Communication) do Electron.
 
@@ -301,7 +315,7 @@ A comunicação entre a interface (React) e o backend (Node.js) é feita atravé
 3.  **Backend (`main_electron.js` e `handlers/*.js`)**: No processo principal, um handler (ouvinte) como `ipcMain.handle('nome-da-tarefa', ...)` intercepta a mensagem. Ele então executa a lógica de backend correspondente (ex: uma automação com Playwright ou uma consulta à API do Google).
 4.  **Retorno**: O resultado da lógica de backend é retornado pela `Promise` do `ipcMain.handle` e viaja de volta para o frontend, onde o `await` do `ipcRenderer.invoke` é resolvido. Logs e atualizações de progresso são enviados de forma assíncrona usando `mainWindow.webContents.send()`.
 
-### 4.3. Adicionando uma Nova Automação
+### 5.3. Adicionando uma Nova Automação
 
 Exemplo: Adicionar uma automação simples que baixa um arquivo.
 
@@ -337,12 +351,12 @@ Exemplo: Adicionar uma automação simples que baixa um arquivo.
 
 A interface será renderizada automaticamente com o novo card, e o fluxo de comunicação já está pronto para executá-lo.
 
-### 4.4. Configurações Avançadas de Desenvolvimento
+### 5.4. Configurações Avançadas de Desenvolvimento
 
 Para criar um ambiente de desenvolvimento ou teste totalmente isolado, você pode alterar os seguintes pontos de conexão:
 
 -   **Mudar a Planilha Google Sheets**:
-    1.  Crie uma nova planilha no Google Sheets com as abas (`Base_Mae_Final`, `Gestores`, `Analistas`, `Acessos_Quadros`). **Certifique-se de que a nova planilha siga a estrutura exata de colunas detalhada na seção 2.3.**
+    1.  Crie uma nova planilha no Google Sheets com as abas (`Base_Mae_Final`, `Gestores`, `Analistas`, `Acessos_Quadros`). **Certifique-se de que a nova planilha siga a estrutura exata de colunas detalhada na seção 3.3.**
     2.  Compartilhe esta nova planilha com o `client_email` da sua `service_account.json`, dando permissão de **Editor**.
     3.  Copie o ID da nova planilha (da URL, por exemplo: `.../spreadsheets/d/ID_DA_PLANILHA/edit`).
     4.  Cole este novo ID na variável `GOOGLE_SHEET_ID` do seu arquivo `.env`.
@@ -354,17 +368,17 @@ Para criar um ambiente de desenvolvimento ou teste totalmente isolado, você pod
     3.  Localize a linha: `const organizationId = "68484f358ac9bdde06499a29";`
     4.  Substitua o ID pelo da sua organização Trello. Você pode obter o ID da sua organização via API do Trello.
 
-## 5. Guia de Testes para Desenvolvedores
+## 6. Guia de Testes para Desenvolvedores
 
 Esta seção descreve como testar as funcionalidades do ExtraHub de forma segura, sem interferir com os dados de produção.
 
-### 5.1. Aviso Importante sobre Testes
+### 6.1. Aviso Importante sobre Testes
 
 **ATENÇÃO:** As seções **Automações** e as etapas iniciais do **Pipeline de Dados** (`Consolidar Relatórios` e `Criar Base Bruta`) interagem com plataformas externas e manipulam dados reais. **NÃO** execute estas automações para testes de interface ou de outras funcionalidades. O uso indevido pode resultar em downloads de dados desnecessários, processamento incorreto de informações de produção e potenciais bloqueios de credenciais.
 
 Utilize as rotinas de automação e pipeline apenas se o objetivo do seu teste for especificamente validar ou depurar essas próprias rotinas.
 
-### 5.2. Fluxo de Teste Seguro (Simulando o Pipeline)
+### 6.2. Fluxo de Teste Seguro (Simulando o Pipeline)
 
 Para testar o fluxo de dados da aplicação (processamento, upload, atribuição) sem executar as automações de download, siga estes passos:
 
@@ -404,7 +418,7 @@ Para testar o fluxo de dados da aplicação (processamento, upload, atribuição
     *   Vá para a tela `Atribuição de Casos`. Seus casos fictícios (com status "Novo") devem aparecer na lista, prontos para serem atribuídos.
     *   Use a `Consulta CPF` com um dos CPFs fictícios que você criou para confirmar que os dados foram salvos corretamente.
 
-### 5.3. Credenciais de Teste
+### 6.3. Credenciais de Teste
 
 Para testes gerais da interface e funcionalidades (excluindo as automações), utilize o seguinte perfil de **Gestor**:
 
@@ -412,9 +426,9 @@ Para testes gerais da interface e funcionalidades (excluindo as automações), u
 -   **Nome Completo**: `Carlos Eduardo Turina`
 -   **CPF**: `43836007860`
 
-## 6. Manutenção, Limitações e Escalabilidade
+## 7. Manutenção, Limitações e Escalabilidade
 
-### 6.1. Gerenciamento de Credenciais Estáticas
+### 7.1. Gerenciamento de Credenciais Estáticas
 
 A ferramenta utiliza uma combinação de credenciais dinâmicas (inseridas pelo usuário durante o uso, como no login assistido) e credenciais estáticas (configuradas no ambiente de desenvolvimento).
 
@@ -424,7 +438,7 @@ A ferramenta utiliza uma combinação de credenciais dinâmicas (inseridas pelo 
 -   **Quais serviços são afetados**: Proconsumidor, Procon SJC, Procon Campinas, BCB-RDR, API do Procon Uberlândia, API do Trello e API do Google.
 -   **Ação corretiva**: Se uma automação falhar, o primeiro passo é verificar se as credenciais correspondentes no arquivo `.env` ainda são válidas. Tente fazer login manualmente no site do serviço com essas credenciais. Se falharem, atualize o arquivo `.env` com as novas credenciais e reinicie o ExtraHub.
 
-### 6.2. Atualização de URLs e Seletores
+### 7.2. Atualização de URLs e Seletores
 
 As automações dependem da estrutura HTML (URLs, IDs de elementos, classes CSS) dos sites externos. Esses sites podem ser atualizados a qualquer momento, o que pode quebrar as automações.
 
@@ -433,7 +447,7 @@ As automações dependem da estrutura HTML (URLs, IDs de elementos, classes CSS)
     1.  Inspecionar o site que falhou para encontrar o novo URL ou seletor do elemento (ex: campo de login, botão de download).
     2.  Atualizar o código correspondente no arquivo de handler apropriado (em `electron/handlers/`).
 
-### 6.3. Limitações de API e Escalabilidade
+### 7.3. Limitações de API e Escalabilidade
 
 A ferramenta utiliza as APIs do Google Sheets e do Trello, ambas configuradas para usar planos gratuitos. Esses planos têm limites de uso (cotas de requisições por minuto/dia).
 
@@ -441,33 +455,33 @@ A ferramenta utiliza as APIs do Google Sheets e do Trello, ambas configuradas pa
 -   **Causa**: Uso excessivo da aplicação em um curto período, excedendo as cotas do plano gratuito.
 -   **Escalabilidade**: Para um uso mais intensivo ou empresarial, é **altamente recomendado** migrar para planos pagos tanto no projeto do Google Cloud quanto no workspace do Trello. Isso garantirá cotas de API mais altas, maior confiabilidade e melhor desempenho geral da ferramenta.
 
-## 7. Solução de Problemas (Troubleshooting)
+## 8. Solução de Problemas (Troubleshooting)
 
-### 7.1. Erros de Login
+### 8.1. Erros de Login
 
 -   **Sintoma**: Mensagem de erro "Opa, parece que tivemos um erro..."
 -   **Causa 1**: Tipo de perfil (Gestor/Analista) não selecionado ou incorreto.
 -   **Causa 2**: Nome ou CPF digitados incorretamente. O nome deve ser **exatamente** como está na planilha, incluindo maiúsculas e minúsculas.
 -   **Causa 3**: O usuário não existe na aba `Gestores` ou `Analistas` da planilha Google Sheets.
 
-### 7.2. Falhas nas Automações
+### 8.2. Falhas nas Automações
 
 -   **Sintoma**: A automação para no meio do caminho com um erro no modal de log.
--   **Causa 1: Credenciais inválidas**: Veja a seção [6.1. Gerenciamento de Credenciais Estáticas](#61-gerenciamento-de-credenciais-estáticas).
--   **Causa 2: Mudança na interface do site**: Veja a seção [6.2. Atualização de URLs e Seletores](#62-atualização-de-urls-e-seletores).
+-   **Causa 1: Credenciais inválidas**: Veja a seção [7.1. Gerenciamento de Credenciais Estáticas](#71-gerenciamento-de-credenciais-estáticas).
+-   **Causa 2: Mudança na interface do site**: Veja a seção [7.2. Atualização de URLs e Seletores](#72-atualização-de-urls-e-seletores).
 -   **Causa 3: Problemas com o Playwright/Chromium**:
     -   **Solução**: Tente remover a pasta `node_modules` e o arquivo `package-lock.json` e rodar `npm install` novamente para forçar uma reinstalação limpa.
 
-### 7.3. Problemas de Conexão (Google/Trello)
+### 8.3. Problemas de Conexão (Google/Trello)
 
 -   **Sintoma**: A aplicação falha ao iniciar ou ao tentar acessar dados online (ex: tela de login não funciona, consulta de CPF dá erro).
 -   **Causa 1: `GOOGLE_SHEET_ID` incorreto**: Verifique o ID no arquivo `.env`.
 -   **Causa 2: `service_account.json` ausente ou inválido**: Certifique-se de que o arquivo está na pasta `backend` e não está corrompido.
 -   **Causa 3: Conta de serviço sem permissão**: Verifique se o `client_email` da conta de serviço foi compartilhado como **Editor** na planilha.
 -   **Causa 4: Credenciais do Trello inválidas**: Verifique `TRELLO_API_KEY` e `TRELLO_API_TOKEN` no arquivo `.env`.
--   **Causa 5: Limites de API excedidos**: Veja a seção [6.3. Limitações de API e Escalabilidade](#63-limitações-de-api-e-escalabilidade).
+-   **Causa 5: Limites de API excedidos**: Veja a seção [7.3. Limitações de API e Escalabilidade](#73-limitações-de-api-e-escalabilidade).
 
-### 7.4. Depuração Geral
+### 8.4. Depuração Geral
 
 -   **Abra o DevTools**: Em `electron/main_electron.js`, descomente a linha `mainWindow.webContents.openDevTools();`. Isso abrirá o console do Chromium junto com a aplicação, permitindo inspecionar elementos da UI, ver logs do console do frontend e depurar o JavaScript do React.
 -   **Logs de Backend**: Os logs do processo principal (backend) são exibidos diretamente no terminal onde você executou `npm start`. Fique de olho neles para erros de Node.js, Playwright e APIs.
