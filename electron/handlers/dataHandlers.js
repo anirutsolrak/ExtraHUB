@@ -242,77 +242,143 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         const caseMap = new Map(allCases.map((row, index) => [row.ID_Reclamacao_Unico, { ...row, rowIndex: index + 2 }]));
         const analystLabelMap = new Map(allAnalysts.map(a => [`${a.Nome_Analista}-${a.ID_Quadro_Trello}`, a.ID_Etiqueta_Trello]));
         
-        let createdCardsCount = 0;
-        const updatesForSheet = [];
-
+        // Pre-create company labels to batch label operations
+        const companyLabelsNeeded = new Set();
         for (const assignment of taskArgs.assignments) {
-            const { caseId, analystName, managerId } = assignment;
-            if (!managerId) { currentLogging.errorTask(`Erro de lógica: Gestor não selecionado para o caso ${caseId}. Pulando.`); continue; }
-            const caseData = caseMap.get(caseId);
-            if (!caseData) { currentLogging.log(`AVISO: Não foi possível encontrar dados para o ID: ${caseId}`); continue; }
-
-            const cardTitle = `${analystName || 'N/A'} | ${caseData.Consumidor_Nome || 'N/A'} - ${caseData.Consumidor_CPF || 'N/A'} | [${caseData.Protocolo_Origem || 'N/A'}]`;
-            
-            let cardDesc = `**Solicitação:**\nCÓPIA DE CONTRATO\n\n`;
-            cardDesc += `**Contrato(s):** N/A\n`;
-            cardDesc += `**Telefone:** ${caseData.Consumidor_Celular || 'N/A'}\n`;
-            cardDesc += `**Empresa:** ${caseData.Fornecedor_Empresa || 'N/A'}\n`;
-            cardDesc += `**Link Original:** N/A`;
-
-            const cardPayload = {
-                name: cardTitle,
-                desc: cardDesc,
-                idList: trelloListId,
-                idMembers: [managerId]
-            };
-            
-            const dueDate = caseData.Prazo_Resposta ? parseDate(caseData.Prazo_Resposta) : null;
-            if (dueDate && !isNaN(dueDate.getTime())) {
-                dueDate.setUTCHours(12);
-                cardPayload.due = dueDate.toISOString();
-            }
-
-            const startDate = caseData.Data_Abertura ? parseDate(caseData.Data_Abertura) : null;
-            if (startDate && !isNaN(startDate.getTime())) {
-                startDate.setUTCHours(12);
-                cardPayload.start = startDate.toISOString();
-            }
-
-            try {
-                const newCard = await fetchTrelloAPI(`cards`, 'POST', cardPayload, currentLogging);
-                
-                const labelsToApply = [];
-                const analystLabelId = analystLabelMap.get(`${analystName}-${taskArgs.boardId}`);
-                if (analystLabelId) {
-                    labelsToApply.push(analystLabelId);
-                }
-
-                if (caseData.Fornecedor_Empresa) {
-                    let companyLabel = allLabelsOnBoard.find(l => l.name.toLowerCase() === caseData.Fornecedor_Empresa.toLowerCase());
-                    if (!companyLabel) {
-                        currentLogging.log(`Criando nova etiqueta para a empresa: ${caseData.Fornecedor_Empresa}`);
-                        companyLabel = await fetchTrelloAPI('labels', 'POST', { name: caseData.Fornecedor_Empresa, color: 'orange', idBoard: taskArgs.boardId }, currentLogging);
-                        allLabelsOnBoard.push(companyLabel);
-                    }
-                    labelsToApply.push(companyLabel.id);
-                }
-
-                for (const labelId of labelsToApply) {
-                    await fetchTrelloAPI(`cards/${newCard.id}/idLabels`, 'POST', { value: labelId }, currentLogging);
-                }
-                
-                updatesForSheet.push(
-                    { range: `Base_Mae_Final!T${caseData.rowIndex}`, values: [[analystName]] },
-                    { range: `Base_Mae_Final!U${caseData.rowIndex}`, values: [[analystName]] },
-                    { range: `Base_Mae_Final!V${caseData.rowIndex}`, values: [['Processado']] },
-                    { range: `Base_Mae_Final!W${caseData.rowIndex}`, values: [[newCard.id]] }
-                );
-                createdCardsCount++;
-            } catch (trelloError) {
-                updatesForSheet.push({ range: `Base_Mae_Final!V${caseData.rowIndex}`, values: [[`Erro Trello: ${trelloError.message.substring(0, 100)}`]] });
+            const caseData = caseMap.get(assignment.caseId);
+            if (caseData && caseData.Fornecedor_Empresa) {
+                companyLabelsNeeded.add(caseData.Fornecedor_Empresa);
             }
         }
+        
+        // Create missing company labels in batch
+        const companyLabelPromises = [];
+        for (const companyName of companyLabelsNeeded) {
+            const exists = allLabelsOnBoard.find(l => l.name.toLowerCase() === companyName.toLowerCase());
+            if (!exists) {
+                currentLogging.log(`Criando etiqueta para empresa: ${companyName}`);
+                companyLabelPromises.push(
+                    fetchTrelloAPI('labels', 'POST', { name: companyName, color: 'orange', idBoard: taskArgs.boardId }, currentLogging)
+                        .then(label => { allLabelsOnBoard.push(label); return label; })
+                );
+            }
+        }
+        
+        if (companyLabelPromises.length > 0) {
+            currentLogging.log(`Criando ${companyLabelPromises.length} novas etiquetas de empresa...`);
+            await Promise.all(companyLabelPromises);
+        }
+        
+        let createdCardsCount = 0;
+        const updatesForSheet = [];
+        
+        // Process assignments in batches to avoid overwhelming the API
+        const BATCH_SIZE = 5;
+        const totalBatches = Math.ceil(taskArgs.assignments.length / BATCH_SIZE);
+        
+        for (let i = 0; i < taskArgs.assignments.length; i += BATCH_SIZE) {
+            const batch = taskArgs.assignments.slice(i, i + BATCH_SIZE);
+            const currentBatch = Math.floor(i / BATCH_SIZE) + 1;
+            currentLogging.log(`Processando lote ${currentBatch}/${totalBatches}...`);
+            
+            const cardCreationPromises = batch.map(async (assignment) => {
+                const { caseId, analystName, managerId } = assignment;
+                if (!managerId) { 
+                    currentLogging.errorTask(`Erro de lógica: Gestor não selecionado para o caso ${caseId}. Pulando.`); 
+                    return null; 
+                }
+                const caseData = caseMap.get(caseId);
+                if (!caseData) { 
+                    currentLogging.log(`AVISO: Não foi possível encontrar dados para o ID: ${caseId}`); 
+                    return null; 
+                }
+
+                const cardTitle = `${analystName || 'N/A'} | ${caseData.Consumidor_Nome || 'N/A'} - ${caseData.Consumidor_CPF || 'N/A'} | [${caseData.Protocolo_Origem || 'N/A'}]`;
+                
+                let cardDesc = `**Solicitação:**\nCÓPIA DE CONTRATO\n\n`;
+                cardDesc += `**Contrato(s):** N/A\n`;
+                cardDesc += `**Telefone:** ${caseData.Consumidor_Celular || 'N/A'}\n`;
+                cardDesc += `**Empresa:** ${caseData.Fornecedor_Empresa || 'N/A'}\n`;
+                cardDesc += `**Link Original:** N/A`;
+
+                const cardPayload = {
+                    name: cardTitle,
+                    desc: cardDesc,
+                    idList: trelloListId,
+                    idMembers: [managerId]
+                };
+                
+                const dueDate = caseData.Prazo_Resposta ? parseDate(caseData.Prazo_Resposta) : null;
+                if (dueDate && !isNaN(dueDate.getTime())) {
+                    dueDate.setUTCHours(12);
+                    cardPayload.due = dueDate.toISOString();
+                }
+
+                const startDate = caseData.Data_Abertura ? parseDate(caseData.Data_Abertura) : null;
+                if (startDate && !isNaN(startDate.getTime())) {
+                    startDate.setUTCHours(12);
+                    cardPayload.start = startDate.toISOString();
+                }
+
+                try {
+                    const newCard = await fetchTrelloAPI(`cards`, 'POST', cardPayload, currentLogging);
+                    
+                    const labelsToApply = [];
+                    const analystLabelId = analystLabelMap.get(`${analystName}-${taskArgs.boardId}`);
+                    if (analystLabelId) {
+                        labelsToApply.push(analystLabelId);
+                    }
+
+                    if (caseData.Fornecedor_Empresa) {
+                        const companyLabel = allLabelsOnBoard.find(l => l.name.toLowerCase() === caseData.Fornecedor_Empresa.toLowerCase());
+                        if (companyLabel) {
+                            labelsToApply.push(companyLabel.id);
+                        }
+                    }
+
+                    // Apply all labels in parallel
+                    if (labelsToApply.length > 0) {
+                        await Promise.all(labelsToApply.map(labelId => 
+                            fetchTrelloAPI(`cards/${newCard.id}/idLabels`, 'POST', { value: labelId }, currentLogging)
+                        ));
+                    }
+                    
+                    return {
+                        success: true,
+                        updates: [
+                            { range: `Base_Mae_Final!T${caseData.rowIndex}`, values: [[analystName]] },
+                            { range: `Base_Mae_Final!U${caseData.rowIndex}`, values: [[analystName]] },
+                            { range: `Base_Mae_Final!V${caseData.rowIndex}`, values: [['Processado']] },
+                            { range: `Base_Mae_Final!W${caseData.rowIndex}`, values: [[newCard.id]] }
+                        ]
+                    };
+                } catch (trelloError) {
+                    return {
+                        success: false,
+                        updates: [{ range: `Base_Mae_Final!V${caseData.rowIndex}`, values: [[`Erro Trello: ${trelloError.message.substring(0, 100)}`]] }]
+                    };
+                }
+            });
+            
+            // Use Promise.allSettled to handle individual failures gracefully
+            const results = await Promise.allSettled(cardCreationPromises);
+            
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    if (result.value) {
+                        if (result.value.success) createdCardsCount++;
+                        updatesForSheet.push(...result.value.updates);
+                    } else {
+                        currentLogging.log(`AVISO: Processamento retornou null (caso possivelmente pulado)`);
+                    }
+                } else if (result.status === 'rejected') {
+                    currentLogging.log(`ERRO: Falha ao processar card: ${result.reason}`);
+                }
+            }
+        }
+        
         if (updatesForSheet.length > 0) {
+            currentLogging.log(`Atualizando ${updatesForSheet.length} células na planilha...`);
             await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: 'USER_ENTERED', data: updatesForSheet } });
         }
         return { success: true, message: `${taskArgs.assignments.length} atribuições processadas. ${createdCardsCount} cards criados no Trello.` };
@@ -350,22 +416,45 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         }
     
         currentLogging.log(`Encontrados ${files.length} arquivos para consolidar em ${folder}.`);
+        
+        // Process files in batches to reduce memory pressure
+        const BATCH_SIZE = 5;
         let allData = [];
-        for (const file of files) {
-            const filePath = path.join(reportsPath, file);
-            let workbook = XLSX.readFile(filePath, { cellDates: false });
-            let sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(sheet, { ...options, raw: false });
+        
+        for (let i = 0; i < files.length; i += BATCH_SIZE) {
+            const batch = files.slice(i, i + BATCH_SIZE);
+            const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(files.length / BATCH_SIZE);
+            currentLogging.log(`Processando lote ${batchNum}/${totalBatches} (${batch.length} arquivos)...`);
             
-            jsonData.forEach(row => {
-                for (const key in row) {
-                    if (key.startsWith('__EMPTY')) {
-                        delete row[key];
+            const batchData = batch.flatMap(file => {
+                try {
+                    const filePath = path.join(reportsPath, file);
+                    const workbook = XLSX.readFile(filePath, { cellDates: false, sheetStubs: false });
+                    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                        currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+                        return [];
                     }
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { ...options, raw: false, defval: '' });
+                    
+                    // Clean up __EMPTY columns efficiently
+                    return jsonData.map(row => {
+                        const cleanRow = {};
+                        for (const key in row) {
+                            if (!key.startsWith('__EMPTY')) {
+                                cleanRow[key] = row[key];
+                            }
+                        }
+                        return cleanRow;
+                    });
+                } catch (error) {
+                    currentLogging.log(`ERRO ao processar arquivo ${file}: ${error.message}. Pulando.`);
+                    return [];
                 }
             });
-
-            allData.push(...jsonData);
+            
+            allData.push(...batchData);
         }
 
         if (allData.length === 0) {
@@ -373,6 +462,7 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             return;
         }
         
+        currentLogging.log(`Total de ${allData.length} registros consolidados. Gerando arquivo de saída...`);
         const newWorkbook = XLSX.utils.book_new();
         const newSheet = XLSX.utils.json_to_sheet(allData);
         XLSX.utils.book_append_sheet(newWorkbook, newSheet, sheetName);
@@ -398,34 +488,59 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             if (files.length === 0) continue;
 
             currentLogging.log(`Processando ${files.length} arquivos para ${company}...`);
+            
+            // Process company files in batches
+            const BATCH_SIZE = 5;
             const companyData = [];
-            for (const file of files) {
-                const workbook = XLSX.readFile(path.join(companyPath, file), { cellDates: false });
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false });
-                
-                jsonData.forEach(row => {
-                    for (const key in row) {
-                        if (key.startsWith('__EMPTY')) {
-                            delete row[key];
+            
+            for (let i = 0; i < files.length; i += BATCH_SIZE) {
+                const batch = files.slice(i, i + BATCH_SIZE);
+                const batchData = batch.flatMap(file => {
+                    try {
+                        const workbook = XLSX.readFile(path.join(companyPath, file), { cellDates: false, sheetStubs: false });
+                        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                            currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+                            return [];
                         }
+                        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' });
+                        
+                        // Clean up __EMPTY columns efficiently and add company tag
+                        return jsonData.map(row => {
+                            const cleanRow = { 'Fonte_Empresa': company };
+                            for (const key in row) {
+                                if (!key.startsWith('__EMPTY')) {
+                                    cleanRow[key] = row[key];
+                                }
+                            }
+                            return cleanRow;
+                        });
+                    } catch (error) {
+                        currentLogging.log(`ERRO ao processar arquivo ${file}: ${error.message}. Pulando.`);
+                        return [];
                     }
                 });
-
-                companyData.push(...jsonData);
+                
+                companyData.push(...batchData);
             }
             
-            const companySheet = XLSX.utils.json_to_sheet(companyData);
-            XLSX.utils.book_append_sheet(newWorkbook, companySheet, company.substring(0, 31));
-            companyData.forEach(row => row['Fonte_Empresa'] = company);
-            allCompanyData.push(...companyData);
+            if (companyData.length > 0) {
+                // Remove 'Fonte_Empresa' temporarily for company sheet
+                const companySheetData = companyData.map(row => {
+                    const { Fonte_Empresa, ...rest } = row;
+                    return rest;
+                });
+                const companySheet = XLSX.utils.json_to_sheet(companySheetData);
+                XLSX.utils.book_append_sheet(newWorkbook, companySheet, company.substring(0, 31));
+                allCompanyData.push(...companyData);
+            }
         }
 
         if (allCompanyData.length > 0) {
             const unifiedSheet = XLSX.utils.json_to_sheet(allCompanyData);
             XLSX.utils.book_append_sheet(newWorkbook, unifiedSheet, 'Unificado');
             XLSX.writeFile(newWorkbook, outputPath, { bookType: 'xlsx', type: 'buffer' });
-            currentLogging.log(`Consolidação do Proconsumidor concluída! Arquivo salvo em: ${outputPath}`);
+            currentLogging.log(`Consolidação do Proconsumidor concluída! Total de ${allCompanyData.length} registros. Arquivo salvo em: ${outputPath}`);
         } else {
             currentLogging.log("Nenhum dado do Proconsumidor encontrado para consolidar.");
         }
@@ -513,8 +628,18 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
 
         const cleanDoc = (doc) => doc ? String(doc).replace(/\D/g, '').padStart(11, '0') : '';
         
+        // Cache for date conversions to avoid redundant parsing
+        const dateCache = new Map();
+        
         const standardizeDateString = (dateValue) => {
             if (!dateValue) return '';
+            
+            // Check cache first
+            const cacheKey = String(dateValue);
+            if (dateCache.has(cacheKey)) {
+                return dateCache.get(cacheKey);
+            }
+            
             let date = null;
             
             if (!isNaN(dateValue) && Number(dateValue) > 1 && String(dateValue).indexOf('.') === -1) {
@@ -544,7 +669,9 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
                 }
             }
             
-            return (date && !isNaN(date.getTime())) ? formatDate(date) : String(dateValue);
+            const result = (date && !isNaN(date.getTime())) ? formatDate(date) : String(dateValue);
+            dateCache.set(cacheKey, result);
+            return result;
         };
 
         const renameMaps = {
@@ -583,6 +710,7 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         currentLogging.log("Unificando e finalizando a Base Mãe...");
         const FINAL_COLUMNS_ORDER_LOCAL = [ 'ID_Reclamacao_Unico', 'Protocolo_Origem', 'Fonte_Dados', 'Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta', 'Canal_Origem', 'Consumidor_Nome', 'Consumidor_CPF', 'Consumidor_Cidade', 'Consumidor_UF', 'Consumidor_Email', 'Consumidor_Celular', 'Consumidor_Faixa_Etaria', 'Consumidor_Genero', 'Fornecedor_Empresa', 'Descricao_Reclamacao', 'Status_Atual', 'Resultado_Final', 'OPERADOR' ]; 
 
+        const dateColsToFormat = ['Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta'];
         const finalData = allData.map(row => {
             const finalRow = {};
             FINAL_COLUMNS_ORDER_LOCAL.forEach(col => finalRow[col] = row[col] || '');
@@ -595,7 +723,7 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             finalRow.ID_Reclamacao_Unico = `${row.Fonte_Dados}_${protocol}`;
             finalRow.Consumidor_CPF = cleanDoc(row.Consumidor_CPF);
             
-            const dateColsToFormat = ['Data_Abertura', 'Data_Finalizacao', 'Prazo_Resposta'];
+            // Use cached date formatting
             for (const col of dateColsToFormat) {
                 if (finalRow[col]) {
                      finalRow[col] = standardizeDateString(finalRow[col]);
@@ -605,6 +733,8 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             return finalRow;
         });
 
+        currentLogging.log(`Data cache statistics: ${dateCache.size} unique date values cached`);
+        
         const finalSheet = XLSX.utils.json_to_sheet(finalData, { header: FINAL_COLUMNS_ORDER_LOCAL });
         
         const stringCols = ['Protocolo_Origem', 'ID_Reclamacao_Unico'];
@@ -640,9 +770,10 @@ ipcMain.handle('pipeline:upload-master-base-to-sheets', (event, args) => runTask
         throw new Error("Arquivo Base_Mae_Final.xlsx não encontrado. Por favor, execute a etapa 'Gerar Base Mãe Final Local' primeiro.");
     }
 
-    const workbook = XLSX.readFile(inputPath, { cellDates: false });
+    currentLogging.log("Lendo arquivo local...");
+    const workbook = XLSX.readFile(inputPath, { cellDates: false, sheetStubs: false });
     const sheet = workbook.Sheets[workbook.SheetNames.find(name => name === 'Base_Mae_Final') || workbook.SheetNames[0]]; 
-    const allLocalData = XLSX.utils.sheet_to_json(sheet, { raw: false });
+    const allLocalData = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' });
 
     const FINAL_COLUMNS_ORDER_SHEETS = [
         'ID_Reclamacao_Unico', 'Protocolo_Origem', 'Fonte_Dados', 'Data_Abertura',
@@ -658,6 +789,7 @@ ipcMain.handle('pipeline:upload-master-base-to-sheets', (event, args) => runTask
         return String(doc).replace(/\D/g, '').padStart(11, '0');
     };
 
+    currentLogging.log(`Processando ${allLocalData.length} registros locais...`);
     const processedDataForUpload = allLocalData.map(row => {
         const newRow = {};
         FINAL_COLUMNS_ORDER_SHEETS.forEach(col => newRow[col] = row[col] || null);
@@ -666,37 +798,39 @@ ipcMain.handle('pipeline:upload-master-base-to-sheets', (event, args) => runTask
         return newRow;
     });
 
-    currentLogging.log("Processamento para upload concluído. Verificando dados no Google Sheets para append...");
-
+    currentLogging.log("Buscando dados existentes no Google Sheets...");
     const googleSheetRange = `Base_Mae_Final!A:${getColumnLetter(FINAL_COLUMNS_ORDER_SHEETS.length -1)}`;
     const existingDataResponse = await sheets.spreadsheets.values.get({ spreadsheetId, range: googleSheetRange });
     const existingGoogleSheetData = existingDataResponse.data.values;
-    let existingGoogleSheetIdMap = new Map();
     
     const firstNewRowIndex = existingGoogleSheetData ? existingGoogleSheetData.length : 0;
 
+    // Build a Set of existing IDs for fast lookup (O(1) instead of O(n))
+    const existingIds = new Set();
     if (existingGoogleSheetData && existingGoogleSheetData.length > 0) {
          const existingHeaders = existingGoogleSheetData[0];
          const idReclamacaoUnicoIndex = existingHeaders.indexOf('ID_Reclamacao_Unico');
          if (idReclamacaoUnicoIndex !== -1) {
              for(let i = 1; i < existingGoogleSheetData.length; i++) {
                  if (existingGoogleSheetData[i][idReclamacaoUnicoIndex]) {
-                     existingGoogleSheetIdMap.set(existingGoogleSheetData[i][idReclamacaoUnicoIndex], existingGoogleSheetData[i]);
+                     existingIds.add(existingGoogleSheetData[i][idReclamacaoUnicoIndex]);
                  }
              }
+             currentLogging.log(`Encontrados ${existingIds.size} registros existentes no Google Sheets.`);
          } else {
              currentLogging.log("Aviso: 'ID_Reclamacao_Unico' não encontrado nos cabeçalhos da Base_Mae_Final. Todos os registros locais serão considerados novos.");
          }
     }
    
+    currentLogging.log("Identificando novos registros...");
     const dataToAppend = [];
     for (const record of processedDataForUpload) {
         if (!record.ID_Reclamacao_Unico) {
-            currentLogging.log(`AVISO: Registro sem ID_Reclamacao_Unico válido, pulando-o. Registro: ${JSON.stringify(record)}`);
+            currentLogging.log(`AVISO: Registro sem ID_Reclamacao_Unico válido, pulando-o.`);
             continue;
         }
 
-        if (!existingGoogleSheetIdMap.has(record.ID_Reclamacao_Unico)) {
+        if (!existingIds.has(record.ID_Reclamacao_Unico)) {
             const rowValues = FINAL_COLUMNS_ORDER_SHEETS.map(col => record[col] || null);
             dataToAppend.push(rowValues);
         }
@@ -713,45 +847,51 @@ ipcMain.handle('pipeline:upload-master-base-to-sheets', (event, args) => runTask
                 requestBody: { values: [FINAL_COLUMNS_ORDER_SHEETS] }
             });
         }
-        currentLogging.log(`Adicionando ${dataToAppend.length} novos registros à Base_Mae_Final no Google Sheets.`);
-        await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: `Base_Mae_Final!A1`,
-            valueInputOption: 'USER_ENTERED',
-            insertDataOption: 'INSERT_ROWS',
-            requestBody: { values: dataToAppend }
-        });
+        
+        currentLogging.log(`Adicionando ${dataToAppend.length} novos registros à Base_Mae_Final no Google Sheets...`);
+        
+        // Upload in batches to handle large datasets efficiently
+        const UPLOAD_BATCH_SIZE = 1000;
+        for (let i = 0; i < dataToAppend.length; i += UPLOAD_BATCH_SIZE) {
+            const batch = dataToAppend.slice(i, i + UPLOAD_BATCH_SIZE);
+            const batchNum = Math.floor(i / UPLOAD_BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(dataToAppend.length / UPLOAD_BATCH_SIZE);
+            currentLogging.log(`Enviando lote ${batchNum}/${totalBatches} (${batch.length} registros)...`);
+            
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: `Base_Mae_Final!A1`,
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                requestBody: { values: batch }
+            });
+        }
 
         currentLogging.log("Aplicando formatação de data nas colunas D, E e F para os novos registros...");
         const sheetInfo = await sheets.spreadsheets.get({ spreadsheetId });
         const sheetId = sheetInfo.data.sheets.find(s => s.properties.title === 'Base_Mae_Final').properties.sheetId;
 
         const dateColumnIndices = [3, 4, 5]; 
-        const formatRequests = [];
-
-        for (const columnIndex of dateColumnIndices) {
-            const request = {
-                repeatCell: {
-                    range: {
-                        sheetId: sheetId,
-                        startRowIndex: firstNewRowIndex,
-                        endRowIndex: firstNewRowIndex + dataToAppend.length,
-                        startColumnIndex: columnIndex,
-                        endColumnIndex: columnIndex + 1 
-                    },
-                    cell: {
-                        userEnteredFormat: {
-                            numberFormat: {
-                                type: "DATE",
-                                pattern: "dd/mm/yyyy"
-                            }
+        const formatRequests = dateColumnIndices.map(columnIndex => ({
+            repeatCell: {
+                range: {
+                    sheetId: sheetId,
+                    startRowIndex: firstNewRowIndex,
+                    endRowIndex: firstNewRowIndex + dataToAppend.length,
+                    startColumnIndex: columnIndex,
+                    endColumnIndex: columnIndex + 1 
+                },
+                cell: {
+                    userEnteredFormat: {
+                        numberFormat: {
+                            type: "DATE",
+                            pattern: "dd/mm/yyyy"
                         }
-                    },
-                    fields: "userEnteredFormat.numberFormat"
-                }
-            };
-            formatRequests.push(request);
-        }
+                    }
+                },
+                fields: "userEnteredFormat.numberFormat"
+            }
+        }));
 
         if (formatRequests.length > 0) {
             await sheets.spreadsheets.batchUpdate({

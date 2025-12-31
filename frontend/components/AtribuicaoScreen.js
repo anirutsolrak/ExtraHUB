@@ -7,6 +7,20 @@ function AtribuicaoScreen() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isChangingBoard, setIsChangingBoard] = React.useState(false);
 
+    // Memoize board name to prefix mapping function
+    const boardNameToPrefix = React.useCallback((boardName) => {
+        const lowerBoardName = boardName.toLowerCase();
+        if (lowerBoardName.includes('bacen') || lowerBoardName.includes('bcb')) return 'BCB_RDR';
+        if (lowerBoardName.includes('consumidor.gov')) return 'Gov';
+        if (lowerBoardName.includes('procon-sp')) return 'SP';
+        if (lowerBoardName.includes('sjc')) return 'SJC';
+        if (lowerBoardName.includes('campinas')) return 'Campinas';
+        if (lowerBoardName.includes('uberlandia')) return 'Uberlandia';
+        if (lowerBoardName.includes('proconsumidor')) return 'Proconsumidor';
+        if (lowerBoardName.includes('hugme')) return 'HugMe';
+        return null;
+    }, []);
+
     const filteredCases = React.useMemo(() => {
         if (!selectedBoardId || !data.boards.length) {
             return data.cases;
@@ -16,19 +30,6 @@ function AtribuicaoScreen() {
         if (!selectedBoard) {
             return data.cases;
         }
-
-        const boardNameToPrefix = (boardName) => {
-            const lowerBoardName = boardName.toLowerCase();
-            if (lowerBoardName.includes('bacen') || lowerBoardName.includes('bcb')) return 'BCB_RDR';
-            if (lowerBoardName.includes('consumidor.gov')) return 'Gov';
-            if (lowerBoardName.includes('procon-sp')) return 'SP';
-            if (lowerBoardName.includes('sjc')) return 'SJC';
-            if (lowerBoardName.includes('campinas')) return 'Campinas';
-            if (lowerBoardName.includes('uberlandia')) return 'Uberlandia';
-            if (lowerBoardName.includes('proconsumidor')) return 'Proconsumidor';
-            if (lowerBoardName.includes('hugme')) return 'HugMe';
-            return null;
-        };
 
         const prefix = boardNameToPrefix(selectedBoard.name);
 
@@ -40,7 +41,13 @@ function AtribuicaoScreen() {
         
         return data.cases;
 
-    }, [selectedBoardId, data.cases, data.boards]);
+    }, [selectedBoardId, data.cases, data.boards, boardNameToPrefix]);
+    
+    // Memoize filtered analysts to avoid recalculation
+    const filteredAnalysts = React.useMemo(() => 
+        (data.analysts || []).filter(a => a.ID_Quadro_Trello === selectedBoardId),
+        [data.analysts, selectedBoardId]
+    );
 
     function TableSkeleton() {
         return (
@@ -101,7 +108,7 @@ function AtribuicaoScreen() {
         );
     }
     
-    const fetchData = async () => {
+    const fetchData = React.useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
@@ -115,11 +122,11 @@ function AtribuicaoScreen() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
     React.useEffect(() => {
         fetchData();
-    }, []);
+    }, [fetchData]);
 
     React.useEffect(() => {
         if (isChangingBoard) {
@@ -128,20 +135,20 @@ function AtribuicaoScreen() {
         }
     }, [isChangingBoard]);
 
-    const handleBoardChange = (e) => {
+    const handleBoardChange = React.useCallback((e) => {
         const newBoardId = e.target.value;
         if (newBoardId !== selectedBoardId) {
             setIsChangingBoard(true);
             setPendingAssignments({});
             setSelectedBoardId(newBoardId);
         }
-    };
+    }, [selectedBoardId]);
     
-    const handleSelectionChange = (caseId, type, value) => {
+    const handleSelectionChange = React.useCallback((caseId, type, value) => {
         setPendingAssignments(prev => ({ ...prev, [caseId]: { ...prev[caseId], [type]: value } }));
-    };
+    }, []);
 
-    const handleLaunchAssignments = async () => {
+    const handleLaunchAssignments = React.useCallback(async () => {
         const assignmentsToSubmit = Object.entries(pendingAssignments)
             .filter(([_, assignment]) => assignment.analystName && assignment.managerId)
             .map(([caseId, assignment]) => ({ caseId, ...assignment }));
@@ -161,9 +168,7 @@ function AtribuicaoScreen() {
         } finally {
             setIsSubmitting(false);
         }
-    };
-
-    const filteredAnalysts = data.analysts.filter(a => a.ID_Quadro_Trello === selectedBoardId);
+    }, [pendingAssignments, selectedBoardId, fetchData]);
 
     if (isLoading) return <AtribuicaoSkeleton />;
     if (error) return <p className="text-red-500 text-center p-4">Erro: {error}</p>;
