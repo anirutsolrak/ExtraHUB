@@ -274,9 +274,12 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
         
         // Process assignments in batches to avoid overwhelming the API
         const BATCH_SIZE = 5;
+        const totalBatches = Math.ceil(taskArgs.assignments.length / BATCH_SIZE);
+        
         for (let i = 0; i < taskArgs.assignments.length; i += BATCH_SIZE) {
             const batch = taskArgs.assignments.slice(i, i + BATCH_SIZE);
-            currentLogging.log(`Processando lote ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(taskArgs.assignments.length / BATCH_SIZE)}...`);
+            const currentBatch = Math.floor(i / BATCH_SIZE) + 1;
+            currentLogging.log(`Processando lote ${currentBatch}/${totalBatches}...`);
             
             const cardCreationPromises = batch.map(async (assignment) => {
                 const { caseId, analystName, managerId } = assignment;
@@ -361,9 +364,13 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             const results = await Promise.allSettled(cardCreationPromises);
             
             for (const result of results) {
-                if (result.status === 'fulfilled' && result.value) {
-                    if (result.value.success) createdCardsCount++;
-                    updatesForSheet.push(...result.value.updates);
+                if (result.status === 'fulfilled') {
+                    if (result.value) {
+                        if (result.value.success) createdCardsCount++;
+                        updatesForSheet.push(...result.value.updates);
+                    } else {
+                        currentLogging.log(`AVISO: Processamento retornou null (caso possivelmente pulado)`);
+                    }
                 } else if (result.status === 'rejected') {
                     currentLogging.log(`ERRO: Falha ao processar card: ${result.reason}`);
                 }

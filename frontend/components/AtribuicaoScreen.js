@@ -45,7 +45,7 @@ function AtribuicaoScreen() {
     
     // Memoize filtered analysts to avoid recalculation
     const filteredAnalysts = React.useMemo(() => 
-        data.analysts.filter(a => a.ID_Quadro_Trello === selectedBoardId),
+        (data.analysts || []).filter(a => a.ID_Quadro_Trello === selectedBoardId),
         [data.analysts, selectedBoardId]
     );
 
