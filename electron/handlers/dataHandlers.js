@@ -357,12 +357,15 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
                 }
             });
             
-            const results = await Promise.all(cardCreationPromises);
+            // Use Promise.allSettled to handle individual failures gracefully
+            const results = await Promise.allSettled(cardCreationPromises);
             
             for (const result of results) {
-                if (result) {
-                    if (result.success) createdCardsCount++;
-                    updatesForSheet.push(...result.updates);
+                if (result.status === 'fulfilled' && result.value) {
+                    if (result.value.success) createdCardsCount++;
+                    updatesForSheet.push(...result.value.updates);
+                } else if (result.status === 'rejected') {
+                    currentLogging.log(`ERRO: Falha ao processar card: ${result.reason}`);
                 }
             }
         }
@@ -417,27 +420,32 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             const totalBatches = Math.ceil(files.length / BATCH_SIZE);
             currentLogging.log(`Processando lote ${batchNum}/${totalBatches} (${batch.length} arquivos)...`);
             
-            const batchData = batch.map(file => {
-                const filePath = path.join(reportsPath, file);
-                const workbook = XLSX.readFile(filePath, { cellDates: false, sheetStubs: false });
-                if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-                    currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+            const batchData = batch.flatMap(file => {
+                try {
+                    const filePath = path.join(reportsPath, file);
+                    const workbook = XLSX.readFile(filePath, { cellDates: false, sheetStubs: false });
+                    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                        currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+                        return [];
+                    }
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { ...options, raw: false, defval: '' });
+                    
+                    // Clean up __EMPTY columns efficiently
+                    return jsonData.map(row => {
+                        const cleanRow = {};
+                        for (const key in row) {
+                            if (!key.startsWith('__EMPTY')) {
+                                cleanRow[key] = row[key];
+                            }
+                        }
+                        return cleanRow;
+                    });
+                } catch (error) {
+                    currentLogging.log(`ERRO ao processar arquivo ${file}: ${error.message}. Pulando.`);
                     return [];
                 }
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(sheet, { ...options, raw: false, defval: '' });
-                
-                // Clean up __EMPTY columns efficiently
-                return jsonData.map(row => {
-                    const cleanRow = {};
-                    for (const key in row) {
-                        if (!key.startsWith('__EMPTY')) {
-                            cleanRow[key] = row[key];
-                        }
-                    }
-                    return cleanRow;
-                });
-            }).flat();
+            });
             
             allData.push(...batchData);
         }
@@ -480,26 +488,31 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             
             for (let i = 0; i < files.length; i += BATCH_SIZE) {
                 const batch = files.slice(i, i + BATCH_SIZE);
-                const batchData = batch.map(file => {
-                    const workbook = XLSX.readFile(path.join(companyPath, file), { cellDates: false, sheetStubs: false });
-                    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-                        currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+                const batchData = batch.flatMap(file => {
+                    try {
+                        const workbook = XLSX.readFile(path.join(companyPath, file), { cellDates: false, sheetStubs: false });
+                        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                            currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+                            return [];
+                        }
+                        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' });
+                        
+                        // Clean up __EMPTY columns efficiently and add company tag
+                        return jsonData.map(row => {
+                            const cleanRow = { 'Fonte_Empresa': company };
+                            for (const key in row) {
+                                if (!key.startsWith('__EMPTY')) {
+                                    cleanRow[key] = row[key];
+                                }
+                            }
+                            return cleanRow;
+                        });
+                    } catch (error) {
+                        currentLogging.log(`ERRO ao processar arquivo ${file}: ${error.message}. Pulando.`);
                         return [];
                     }
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' });
-                    
-                    // Clean up __EMPTY columns efficiently and add company tag
-                    return jsonData.map(row => {
-                        const cleanRow = { 'Fonte_Empresa': company };
-                        for (const key in row) {
-                            if (!key.startsWith('__EMPTY')) {
-                                cleanRow[key] = row[key];
-                            }
-                        }
-                        return cleanRow;
-                    });
-                }).flat();
+                });
                 
                 companyData.push(...batchData);
             }
