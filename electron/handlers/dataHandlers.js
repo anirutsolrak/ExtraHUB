@@ -420,6 +420,10 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
             const batchData = batch.map(file => {
                 const filePath = path.join(reportsPath, file);
                 const workbook = XLSX.readFile(filePath, { cellDates: false, sheetStubs: false });
+                if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                    currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+                    return [];
+                }
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
                 const jsonData = XLSX.utils.sheet_to_json(sheet, { ...options, raw: false, defval: '' });
                 
@@ -478,6 +482,10 @@ function registerDataHandlers(ipcMain, logging, { getGoogleAuthClient, google })
                 const batch = files.slice(i, i + BATCH_SIZE);
                 const batchData = batch.map(file => {
                     const workbook = XLSX.readFile(path.join(companyPath, file), { cellDates: false, sheetStubs: false });
+                    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                        currentLogging.log(`AVISO: Arquivo ${file} não possui planilhas válidas. Pulando.`);
+                        return [];
+                    }
                     const sheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' });
                     
