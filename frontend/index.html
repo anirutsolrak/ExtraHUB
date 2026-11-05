@@ -17,6 +17,9 @@
 </head>
 <body class="bg-gray-100">
     <div id="root"></div>
+    <!-- Modo demonstração: só é ativado quando não há backend Electron real (window.electronAPI ausente). -->
+    <script src="demo/mockData.js"></script>
+    <script src="demo/mockApi.js"></script>
     <script type="text/babel" src="components/LoginScreen.js"></script>
     <script type="text/babel" src="components/HomeScreen.js"></script>
     <script type="text/babel" src="components/AtribuicaoScreen.js"></script>
@@ -29,6 +32,8 @@
     <script type="text/babel" src="components/AutomationCard.js"></script>
     <script type="text/babel" src="components/SearchResultDisplay.js"></script>
     <script type="text/babel" src="components/AudienciasDisplay.js"></script>
+    <script type="text/babel" src="components/TrelloMockBoard.js"></script>
+    <script type="text/babel" src="components/DemoBanner.js"></script>
     <script type="text/babel" src="app.js"></script>
 </body>
 </html>

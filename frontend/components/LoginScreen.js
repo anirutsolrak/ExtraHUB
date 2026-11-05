@@ -4,6 +4,14 @@ function LoginScreen({ onLogin, error, isLoading }) {
     const [userType, setUserType] = React.useState('');
     const [localError, setLocalError] = React.useState('');
 
+    const demoAccounts = window.EXTRAHUB_DEMO ? window.ExtraHubDemo.getAccounts() : null;
+    const fillDemoAccount = (account) => {
+        setUserType(account.role);
+        setUsername(account.name);
+        setPassword(account.cpf);
+        setLocalError('');
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         if (isLoading) return;
@@ -82,6 +90,29 @@ function LoginScreen({ onLogin, error, isLoading }) {
                         </button>
                     </form>
                 </div>
+
+                {demoAccounts && (
+                    <div className="mt-4 bg-amber-50 border border-amber-200 p-4 rounded-xl text-sm">
+                        <p className="font-semibold text-amber-900 mb-1">Contas de demonstração</p>
+                        <p className="text-xs text-amber-800 mb-3">Clique para preencher. O <strong>Gestor</strong> vê todas as telas; o <strong>Analista</strong> vê só o próprio quadro filtrado.</p>
+                        <div className="space-y-2">
+                            {[demoAccounts.gestores[0], demoAccounts.analistas[0]].map(acc => (
+                                <button
+                                    key={acc.role}
+                                    type="button"
+                                    onClick={() => fillDemoAccount(acc)}
+                                    className="w-full flex justify-between items-center bg-white border border-amber-200 rounded-lg px-3 py-2 hover:bg-amber-100 text-left"
+                                >
+                                    <span>
+                                        <span className="block font-medium text-gray-800">{acc.name}</span>
+                                        <span className="block text-xs text-gray-500">CPF {acc.cpf}</span>
+                                    </span>
+                                    <span className="text-xs font-semibold uppercase text-amber-700">{acc.role}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

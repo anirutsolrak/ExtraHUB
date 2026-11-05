@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('electronAPI', {
+// Em modo demonstração (`npm run demo:electron`) a API real não é exposta:
+// o frontend detecta a ausência e ativa o backend simulado (frontend/demo/mockApi.js).
+const isDemo = process.argv.includes('--extrahub-demo');
+
+if (!isDemo) contextBridge.exposeInMainWorld('electronAPI', {
     // Comunicação Geral
     selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
     onLog: (callback) => ipcRenderer.on('log', (event, ...args) => callback(...args)),

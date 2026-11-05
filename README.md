@@ -6,6 +6,7 @@ Bem-vindo à documentação do ExtraHub, o Hub de Gestão de Automações e Rela
 
 - [1. Introdução](#1-introdução)
 - [2. Demonstração do Projeto](#2-demonstração-do-projeto)
+- [Modo Demonstração (teste sem credenciais)](#modo-demonstração-teste-sem-credenciais)
 - [3. Instalação e Configuração](#3-instalação-e-configuração)
   - [3.1. Pré-requisitos](#31-pré-requisitos)
   - [3.2. Passos de Instalação](#32-passos-de-instalação)
@@ -50,6 +51,54 @@ O ExtraHub é uma aplicação desktop construída com Electron, React e Node.js,
 
 📌 **Dica:** Para uma melhor qualidade de imagem e som, você também pode assistir ao vídeo diretamente no Instagram:
 👉 [https://www.instagram.com/reel/DMpymSfscBH](https://www.instagram.com/reel/DMpymSfscBH/?utm_source=ig_web_copy_link&igsh=MW54eGZhMW54bXZ1Yg==)
+
+## Modo Demonstração (teste sem credenciais)
+
+Para quem quer **conhecer e testar o ExtraHub** sem acesso às credenciais da empresa, existe um modo demonstração. Nele, todas as conexões externas (Google Sheets, Trello, Playwright/sites dos órgãos e API do Procon Uberlândia) são **simuladas** por um backend falso que roda no próprio navegador, com uma base de dados **100% fictícia**. As telas são exatamente as mesmas da aplicação real.
+
+### Como rodar
+
+**No navegador (recomendado, não precisa de `npm install`):**
+```bash
+node scripts/serve-demo.js
+```
+Depois, abra http://localhost:4173. (Também funciona com `npm run demo`.)
+
+**Como app desktop (Electron):** após o `npm install`, rode:
+```bash
+npm run demo:electron
+```
+
+**Online (GitHub Pages):** o workflow `.github/workflows/demo-pages.yml` publica a pasta `frontend/` a cada push na `main` que altere o frontend. Para ativar, vá em *Settings → Pages → Source* e escolha **GitHub Actions**.
+
+### Contas de demonstração
+
+| Perfil   | Nome Completo   | CPF           | O que vê |
+| :------- | :-------------- | :------------ | :------- |
+| Gestor   | `Gestor Demo`   | `11111111111` | Todas as telas e todos os quadros |
+| Gestor   | `Mariana Lopes` | `22222222222` | Apenas os quadros Consumidor.gov, HugMe e Procon-SP |
+| Analista | `Analista Demo` | `44444444444` | Quadro Consumidor.gov filtrado pela própria etiqueta |
+
+A tela de login tem atalhos que preenchem essas contas com um clique.
+
+### Roteiro sugerido de teste
+
+1. Entre como **Gestor Demo**. A Home mostra um **quadro Trello simulado** (dá para arrastar os cartões entre as listas e abrir os detalhes).
+2. Em **Automações**, execute *Consumidor.gov: Baixar Relatórios*. Ele simula o **login assistido**: clique em "Confirmar Login" e acompanhe o log. Cada automação gera reclamações fictícias novas.
+3. Em **Processamento de Dados**, execute as etapas **1 → 2 → 3 → 4** em ordem (se pular uma etapa, aparece o mesmo tipo de erro da aplicação real).
+4. Em **Atribuição de Casos**, escolha o quadro *Consumidor.gov*, atribua um analista e um gestor a um caso e clique em **Lançar**.
+5. Volte à **Home**: o cartão novo aparece na lista **Entrantes**. Saia e entre como **Analista Demo** para ver a visão filtrada.
+6. Em **Consulta CPF**, busque `12345678909` (consumidor com reclamações em 3 fontes). Em **Audiências**, liste os casos com audiência.
+7. Em **Gerenciar Acessos**, marque/desmarque acessos e adicione/remova analistas.
+
+As alterações ficam salvas no `localStorage` do navegador. Para voltar ao estado inicial, use o botão **"Modo demonstração" → "Restaurar dados de exemplo"** no canto inferior direito.
+
+### Como funciona
+
+- `frontend/demo/mockData.js`: gera a base fictícia (gestores, analistas, acessos, `Base_Mae_Final`, quadros/etiquetas/cartões do Trello).
+- `frontend/demo/mockApi.js`: implementa o mesmo `window.electronAPI` que o `preload.js` expõe, respondendo a todos os canais IPC (`auth:*`, `data:*`, `trello:*`, `automation:*`, `pipeline:*`, `search:*`, `api:*`) com os mesmos formatos de retorno e mensagens de log dos handlers reais.
+- O mock **só é ativado quando não existe uma API real**: no Electron normal (`npm start`) nada muda. Com `npm run demo:electron`, o processo principal não registra handlers nem carrega credenciais, e o preload não expõe a API, então o mock assume.
+- `frontend/components/TrelloMockBoard.js` substitui a `<webview>` do Trello e `DemoBanner.js` mostra o selo de demonstração; ambos só aparecem no modo demo.
 
 ## 3. Instalação e Configuração
 

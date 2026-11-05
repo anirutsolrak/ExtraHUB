@@ -200,7 +200,12 @@ function App() {
     ];
 
     if (!currentUser) {
-        return <LoginScreen onLogin={handleLogin} error={loginError} isLoading={isLoggingIn} />;
+        return (
+            <>
+                <LoginScreen onLogin={handleLogin} error={loginError} isLoading={isLoggingIn} />
+                <DemoBanner />
+            </>
+        );
     }
     
     const visibleMenuItems = menuItems.filter(item => {
@@ -231,6 +236,7 @@ function App() {
                 onConfirm={() => window.electronAPI.confirmLogin()}
                 onCancel={() => window.electronAPI.cancelLogin()}
             />
+            <DemoBanner />
         </div>
     );
 }
