@@ -164,7 +164,12 @@ function HomeScreen({ currentUser }) {
             )}
             
             <div className="flex-grow bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                {trelloUrl ? (
+                {trelloUrl && window.EXTRAHUB_DEMO ? (
+                    <TrelloMockBoard
+                        boardId={currentUser.role === 'gestor' ? selectedBoardId : currentUser.boardId}
+                        labelFilter={currentUser.role === 'analista' ? currentUser.trelloLabelName : null}
+                    />
+                ) : trelloUrl ? (
                     <webview
                         ref={webviewRef}
                         key={trelloUrl}

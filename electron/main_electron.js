@@ -12,6 +12,8 @@ let mainWindow;
 let googleAuthClient = null;
 
 const isDev = !app.isPackaged;
+// Modo demonstração: nenhuma credencial é carregada e nenhuma conexão externa é feita.
+const isDemo = process.argv.includes('--demo') || process.env.EXTRAHUB_DEMO === '1';
 const backendPath = isDev ? path.join(__dirname, '..', 'backend') : path.join(process.resourcesPath, 'app.asar.unpacked', 'backend');
 dotenv.config({ path: path.join(backendPath, '.env') });
 
@@ -51,10 +53,14 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'), 
             contextIsolation: true, 
             nodeIntegration: false,
-            webviewTag: true
+            webviewTag: true,
+            additionalArguments: isDemo ? ['--extrahub-demo'] : []
         } 
     });
     mainWindow.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+
+    // No modo demo nenhum handler IPC é registrado: o frontend usa o backend simulado.
+    if (isDemo) return;
 
     if (isDev) {
         mainWindow.webContents.openDevTools();

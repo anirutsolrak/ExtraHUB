@@ -5,6 +5,8 @@
   "main": "electron/main_electron.js",
   "scripts": {
     "start": "electron .",
+    "demo": "node scripts/serve-demo.js",
+    "demo:electron": "electron . --demo",
     "pack": "electron-builder",
     "postinstall": "playwright install chromium"
   },
